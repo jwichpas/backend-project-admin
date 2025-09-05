@@ -367,6 +367,46 @@ CREATE TABLE IF NOT EXISTS parties (
 CREATE INDEX IF NOT EXISTS idx_parties_doc ON parties(company_id, doc_type, doc_number);
 CREATE TRIGGER update_parties_updated_at BEFORE UPDATE ON parties FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
 
+CREATE TABLE IF NOT EXISTS party_locations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  party_id UUID NOT NULL REFERENCES parties(id) ON DELETE CASCADE,
+  latitude NUMERIC(10, 6) NOT NULL,
+  longitude NUMERIC(10, 6) NOT NULL,
+  sequence INT, -- útil si quieres definir rutas
+  is_primary BOOLEAN DEFAULT FALSE, -- por si una party tiene varias ubicaciones
+  description TEXT, -- opcional, nombre del punto (ej: "almacén central")
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+-- Rápido acceso a ubicaciones por party
+CREATE INDEX IF NOT EXISTS idx_party_locations_party_id ON party_locations(party_id);
+-- Rápido acceso a la ubicación principal
+CREATE INDEX IF NOT EXISTS idx_party_locations_primary ON party_locations(party_id, is_primary);
+
+-- Desactiva is_primary en todas las otras ubicaciones de la misma party.
+CREATE OR REPLACE FUNCTION enforce_single_primary_location()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Si se está marcando esta ubicación como principal
+  IF NEW.is_primary THEN
+    -- Desactivar todas las otras ubicaciones principales de esta party
+    UPDATE party_locations
+    SET is_primary = FALSE
+    WHERE party_id = NEW.party_id
+      AND id <> NEW.id
+      AND is_primary = TRUE;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE TRIGGER trg_party_locations_primary
+BEFORE INSERT OR UPDATE ON party_locations
+FOR EACH ROW
+WHEN (NEW.is_primary IS TRUE)
+EXECUTE FUNCTION enforce_single_primary_location();
+
+
 
 CREATE TABLE IF NOT EXISTS party_contacts (
   id UUID PRIMARY KEY DEFAULT GEN_RANDOM_UUID(),
