@@ -1,6 +1,3 @@
-<
-3
-3
 -- Habilitar extensiones comunes en Supabase
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
@@ -275,7 +272,22 @@ CREATE TABLE IF NOT EXISTS warehouse_zones (
   height NUMERIC(18,6) NOT NULL DEFAULT 0,
   length NUMERIC(18,6) NOT NULL DEFAULT 0,
   capacity_kg NUMERIC(18,6),
+
   volume_m3 GENERATED ALWAYS AS (width * height * length) STORED,
+  -- Coordenadas de posición (en metros desde el punto de origen del almacén)
+  x_coordinate numeric(18,6) DEFAULT 0, -- Distancia horizontal desde origen
+  y_coordinate numeric(18,6) DEFAULT 0, -- Distancia vertical desde origen
+  z_coordinate numeric(18,6) DEFAULT 0, -- Altura (para almacenes multi-nivel)
+  rotation_degrees numeric(18,6) DEFAULT 0, -- Rotación de la zona
+
+  -- Tipo de forma y definición
+  shape_type text DEFAULT 'RECTANGLE' CHECK (shape_type IN ('RECTANGLE', 'SQUARE', 'CIRCLE', 'POLYGON')),
+  vertices jsonb DEFAULT '[]'::jsonb, -- Para formas poligonales: [{"x":0, "y":0}, {"x":5, "y":0}, {"x":5, "y":3}, {"x":0, "y":3}]
+
+  -- Metadata visual
+  color_hex text DEFAULT '#3B82F6' CHECK (color_hex ~ '^#[0-9A-Fa-f]{6}$'),
+  opacity numeric(3,2) DEFAULT 0.7 CHECK (opacity BETWEEN 0 AND 1),
+
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   deleted_at TIMESTAMPTZ,
@@ -352,6 +364,9 @@ CREATE TABLE IF NOT EXISTS parties (
   UNIQUE(company_id, doc_type, doc_number),
   CHECK (is_customer OR is_supplier)
 );
+CREATE INDEX IF NOT EXISTS idx_parties_doc ON parties(company_id, doc_type, doc_number);
+CREATE TRIGGER update_parties_updated_at BEFORE UPDATE ON parties FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
+
 
 CREATE TABLE IF NOT EXISTS party_contacts (
   id UUID PRIMARY KEY DEFAULT GEN_RANDOM_UUID(),
@@ -366,33 +381,52 @@ CREATE TABLE IF NOT EXISTS party_contacts (
   deleted_at TIMESTAMPTZ
 );
 
+CREATE TRIGGER update_party_contacts_updated_at BEFORE UPDATE ON party_contacts FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
+
 -- Nueva tabla: Direcciones adicionales para parties
-CREATE TABLE IF NOT EXISTS party_addresses (
-  id UUID PRIMARY KEY DEFAULT GEN_RANDOM_UUID(),
-  company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
-  party_id UUID NOT NULL REFERENCES parties(id) ON DELETE CASCADE,
-  address_type TEXT NOT NULL DEFAULT 'PRINCIPAL', -- PRINCIPAL, ENTREGA, FACTURACIÓN
-  address TEXT NOT NULL,
-  reference TEXT,
-  ubigeo_code VARCHAR(6) REFERENCES sunat.ubigeo(code),
-  is_default BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
-  deleted_at TIMESTAMPTZ
+CREATE TABLE IF NOT EXISTS party_establecimientos (
+  id uuid primary key default gen_random_uuid(),
+  party_id uuid not null references parties(id) on delete cascade,
+  codigo varchar(50),
+  tipo_establecimiento varchar(150),
+  actividad_economica varchar(150),
+  direccion text,
+  ubigeo_sunat varchar(6) references sunat.ubigeo(code),
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  deleted_at timestamptz
+);
+
+CREATE TABLE IF NOT EXISTS party_representantes (
+  id uuid primary key default gen_random_uuid(),
+  party_id uuid not null references parties(id) on delete cascade,
+  tipo_de_documento varchar(8) ,
+  numero_de_documento varchar(15),
+  nombre varchar(250),
+  cargo text,
+  fecha_desde date,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  deleted_at timestamptz
 );
 
 -- ============ FIN PROVEEDORES Y CLIENTES ============
+
 -- ============ PRODUCTOS ============
 CREATE TABLE IF NOT EXISTS brands (
   id UUID PRIMARY KEY DEFAULT GEN_RANDOM_UUID(),
   company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   code TEXT,
+  active boolean default true,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   deleted_at TIMESTAMPTZ,
   UNIQUE(company_id, name)
 );
+CREATE INDEX IF NOT EXISTS idx_brands_active ON brands(active);
+CREATE TRIGGER update_brands_updated_at BEFORE UPDATE ON brands FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
+
 
 CREATE TABLE IF NOT EXISTS categories (
   id UUID PRIMARY KEY DEFAULT GEN_RANDOM_UUID(),
@@ -400,11 +434,15 @@ CREATE TABLE IF NOT EXISTS categories (
   parent_id UUID REFERENCES categories(id) ON DELETE SET NULL,
   name TEXT NOT NULL,
   code TEXT,
+  active boolean default true,
+  level integer not null default 0,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   deleted_at TIMESTAMPTZ,
   UNIQUE(company_id, name)
 );
+CREATE INDEX IF NOT EXISTS idx_categories_active ON categories(active);
+CREATE TRIGGER update_categories_updated_at BEFORE UPDATE ON categories FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
 
 CREATE TABLE IF NOT EXISTS products (
   id UUID PRIMARY KEY DEFAULT GEN_RANDOM_UUID(),
@@ -415,23 +453,46 @@ CREATE TABLE IF NOT EXISTS products (
   description TEXT,
   brand_id UUID REFERENCES brands(id) ON DELETE SET NULL,
   category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
-  unit_code VARCHAR(10) NOT NULL REFERENCES sunat.cat_06_unidades_medida(code),
+  unit_code VARCHAR(10) NOT NULL REFERENCES sunat.cat_03_unidades_medida(code),
+  tipo_afectacion VARCHAR(2) NOT NULL REFERENCES sunat.cat_07_afect_igv(code) ON DELETE CASCADE,
+  -- Dimensiones físicas
   width NUMERIC(18,6) DEFAULT 0,
   height NUMERIC(18,6) DEFAULT 0,
   length NUMERIC(18,6) DEFAULT 0,
   weight_kg NUMERIC(18,6) DEFAULT 0,
   volume_m3 GENERATED ALWAYS AS (COALESCE(width,0)*COALESCE(height,0)*COALESCE(length,0)) STORED,
+  
+  -- Control de inventario
   is_serialized BOOLEAN DEFAULT FALSE,
   is_batch_controlled BOOLEAN DEFAULT FALSE,
   min_stock NUMERIC(18,6) DEFAULT 0,
   max_stock NUMERIC(18,6) DEFAULT 0,
+  reorder_point quantity DEFAULT 0,
+
+  -- Estado y metadatos
   active BOOLEAN DEFAULT TRUE,
+  tags TEXT[],
+  search_vector TSVECTOR,
+  metadata JSONB DEFAULT '{}'::jsonb,
+
+
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   deleted_at TIMESTAMPTZ,
-  UNIQUE(company_id, sku)
+  CONSTRAINT uq_products_company_sku UNIQUE (company_id, sku),
+  CONSTRAINT chk_stock_levels CHECK (max_stock >= min_stock)
 );
 
+CREATE INDEX IF NOT EXISTS idx_products_sku ON products(company_id, sku);
+CREATE INDEX idx_products_brand_id ON products(brand_id);
+CREATE INDEX idx_products_category_id ON products(category_id);
+CREATE INDEX idx_products_unit_code ON products(unit_code);
+CREATE INDEX idx_brands_company ON brands(company_id);
+CREATE INDEX idx_categories_company ON categories(company_id);
+
+CREATE TRIGGER update_products_updated_at BEFORE UPDATE ON products FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
+
+-- Otras tablas relacionadas con productos 
 CREATE TABLE IF NOT EXISTS product_images (
   id UUID PRIMARY KEY DEFAULT GEN_RANDOM_UUID(),
   company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
@@ -445,7 +506,7 @@ CREATE TABLE IF NOT EXISTS product_codes (
   id UUID PRIMARY KEY DEFAULT GEN_RANDOM_UUID(),
   company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
   product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  code_type TEXT NOT NULL,
+  code_type TEXT NOT NULL, -- 'EAN','UPC','SKU_ALT','SERIE','LOTE'
   code_value TEXT NOT NULL,
   UNIQUE(product_id, code_type, code_value)
 );
@@ -492,6 +553,9 @@ CREATE TABLE IF NOT EXISTS product_series (
   UNIQUE(company_id, product_id, serie)
 );
 
+CREATE INDEX IF NOT EXISTS idx_product_series_product ON product_series(product_id);
+CREATE TRIGGER update_product_series_updated_at BEFORE UPDATE ON product_series FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
+
 -- Nueva tabla: Lotes de productos (para productos con control de lote)
 CREATE TABLE IF NOT EXISTS product_batches (
   id UUID PRIMARY KEY DEFAULT GEN_RANDOM_UUID(),
@@ -501,9 +565,31 @@ CREATE TABLE IF NOT EXISTS product_batches (
   expiration_date DATE,
   manufacturing_date DATE,
   purchase_doc_id UUID, -- Referencia al documento de compra
+  qty_initial NUMERIC(18,6) NOT NULL,
+  qty_available NUMERIC(18,6) NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(company_id, product_id, batch_code)
+);
+
+CREATE INDEX IF NOT EXISTS idx_product_batches_product ON product_batches(product_id);
+CREATE TRIGGER update_product_batches_updated_at BEFORE UPDATE ON product_batches FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
+
+
+-- Ubicaciones de productos en almacén (coordenadas 3D)
+CREATE TABLE IF NOT EXISTS product_location (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    product_id UUID REFERENCES products(id) ON DELETE CASCADE,
+    warehouse_zone_id UUID REFERENCES warehouse_zones(id) ON DELETE CASCADE,
+    position_x NUMERIC(8,2),
+    position_y NUMERIC(8,2),
+    position_z NUMERIC(8,2),
+    capacity_max NUMERIC(10,2) CHECK (capacity_max >= 0), -- Capacidad máxima en esta ubicación
+    stock_actual NUMERIC(10,2) DEFAULT 0 CHECK (stock_actual >= 0),
+    es_principal BOOLEAN DEFAULT false, -- Ubicación principal del producto
+    estado BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 -- ============ FIN PRODUCTOS ============
 
@@ -516,7 +602,7 @@ CREATE TABLE IF NOT EXISTS product_purchase_prices (
   currency_code VARCHAR(3) NOT NULL REFERENCES sunat.cat_02_monedas(code),
   unit_price NUMERIC(18,6) NOT NULL,
   observed_at DATE NOT NULL,
-  source_doc_type VARCHAR(2) REFERENCES sunat.cat_10_tipo_documento(code),
+  source_doc_type VARCHAR(2) REFERENCES sunat.cat_01_tipo_documento(code),
   source_doc_series TEXT,
   source_doc_number TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -533,6 +619,8 @@ CREATE TABLE IF NOT EXISTS price_lists (
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(company_id, name)
 );
+CREATE TRIGGER update_price_lists_updated_at BEFORE UPDATE ON price_lists FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
+
 
 CREATE TABLE IF NOT EXISTS price_list_items (
   id UUID PRIMARY KEY DEFAULT GEN_RANDOM_UUID(),
@@ -598,6 +686,32 @@ CREATE TABLE IF NOT EXISTS vehicles (
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(company_id, plate)
 );
+
+CREATE TABLE IF NOT EXISTS vehicle_realtime_status (
+  vehicle_id UUID PRIMARY KEY REFERENCES vehicles(id) ON DELETE CASCADE,
+  latitude NUMERIC(10, 6),
+  longitude NUMERIC(10, 6),
+  speed_kph NUMERIC(6, 2),
+  heading_deg NUMERIC(5, 2), -- dirección del vehículo en grados (0-360)
+  status TEXT CHECK (status IN ('active', 'idle', 'stopped', 'maintenance')),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS vehicle_position_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  vehicle_id UUID NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
+  latitude NUMERIC(10, 6) NOT NULL,
+  longitude NUMERIC(10, 6) NOT NULL,
+  speed_kph NUMERIC(6, 2),
+  heading_deg NUMERIC(5, 2),
+  status TEXT CHECK (status IN ('active', 'idle', 'stopped', 'maintenance')),
+  change_type TEXT CHECK (change_type IN ('position', 'speed', 'status', 'multiple')),
+  reported_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_vehicle_logs_vehicle_id ON vehicle_position_logs(vehicle_id);
+CREATE INDEX idx_vehicle_logs_reported_at ON vehicle_position_logs(reported_at);
 
 CREATE TABLE IF NOT EXISTS drivers (
   id UUID PRIMARY KEY DEFAULT GEN_RANDOM_UUID(),
