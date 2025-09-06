@@ -1019,7 +1019,8 @@ onMounted(() => {
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
   // Limpiar intervalos de seguimiento
-  vehicleTrackingIntervals.value.forEach(interval => clearInterval(interval))
+  vehicleTrackingIntervals.value.forEach((interval) => clearInterval(interval))
+  vehicleTrackingIntervals.value.clear()
   // Desconectar WebSocket
   webSocketService.disconnect()
 })
