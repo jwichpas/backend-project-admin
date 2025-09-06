@@ -1018,11 +1018,17 @@ onMounted(() => {
 // Cleanup event listener
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
-  // Limpiar intervalos de seguimiento
-  vehicleTrackingIntervals.value.forEach((interval) => clearInterval(interval))
-  vehicleTrackingIntervals.value.clear()
+  
+  // Limpiar intervalos de seguimiento de forma segura
+  if (vehicleTrackingIntervals.value && typeof vehicleTrackingIntervals.value.forEach === 'function') {
+    vehicleTrackingIntervals.value.forEach((interval) => clearInterval(interval))
+    vehicleTrackingIntervals.value.clear()
+  }
+  
   // Desconectar WebSocket
-  webSocketService.disconnect()
+  if (webSocketService && typeof webSocketService.disconnect === 'function') {
+    webSocketService.disconnect()
+  }
 })
 
 const toggleLayer = (layerName: string) => {
