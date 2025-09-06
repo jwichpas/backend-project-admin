@@ -74,6 +74,17 @@
             </router-link>
           </li>
 
+          <!-- Logistics Section -->
+          <li class="mt-6">
+            <p v-if="!isCollapsed" class="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Logística</p>
+          </li>
+          <li>
+            <router-link to="/map" class="group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors" :class="getNavClass('/map')">
+              <MapPin class="mr-3 h-5 w-5 transition-colors" :class="getIconClass('/map')" />
+              <span v-if="!isCollapsed">Mapa</span>
+            </router-link>
+          </li>
+
           <!-- Reports Section -->
           <li class="mt-6">
             <p v-if="!isCollapsed" class="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Reportes</p>

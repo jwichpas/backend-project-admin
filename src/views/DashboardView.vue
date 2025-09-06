@@ -78,16 +78,9 @@
     <!-- Charts and Tables Row -->
     <div class="grid gap-6 lg:grid-cols-7">
       <!-- Sales Chart -->
-      <Card class="lg:col-span-4">
-        <CardHeader>
-          <CardTitle>Ventas del Mes</CardTitle>
-        </CardHeader>
-        <CardContent class="p-0">
-          <div class="h-80 flex items-center justify-center text-muted-foreground">
-            [Gráfico de Ventas - Implementar con Chart.js o similar]
-          </div>
-        </CardContent>
-      </Card>
+      <div class="lg:col-span-4">
+        <DefaultMultipleBarChart />
+      </div>
 
       <!-- Recent Activities -->
       <Card class="lg:col-span-3">
@@ -236,6 +229,7 @@ import TableHead from '@/components/ui/TableHead.vue'
 import TableBody from '@/components/ui/TableBody.vue'
 import TableCell from '@/components/ui/TableCell.vue'
 import Badge from '@/components/ui/Badge.vue'
+import DefaultMultipleBarChart from '@/components/ui/DefaultMultipleBarChart.vue'
 
 const companyStore = useCompanyStore()
 const productsStore = useProductsStore()
