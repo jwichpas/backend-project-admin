@@ -198,7 +198,7 @@ CREATE TABLE public.companies (
         CHECK (valuation_method IN ('FIFO', 'PROMEDIO_MOVIL', 'LIFO')),
 
     logo_url TEXT,
-    website TEXT;
+    website TEXT,
 
     -- Facturación electrónica (encriptada)
     sol_user TEXT,

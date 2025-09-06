@@ -395,68 +395,56 @@ EXECUTE FUNCTION trigger_recompute_stock_ledger_balances();
 -- ======================= INICIO::ACTUALIZA STOCK EN ALMACENES =====================================
 -- Actualizar el stock en warehouse_stock después de un movimiento en stock_ledger
 -- Mantener stock de un producto en un almacén (insert/update automático)
-CREATE OR REPLACE FUNCTION update_warehouse_stock_balance(
-    p_warehouse_id UUID,
-    p_product_id UUID,
-    p_balance_qty NUMERIC
-)
-RETURNS void
-LANGUAGE plpgsql
-AS $$
-BEGIN
-    INSERT INTO warehouse_stock (warehouse_id, product_id, balance_qty)
-    VALUES (p_warehouse_id, p_product_id, p_balance_qty)
-    ON CONFLICT (warehouse_id, product_id)
-    DO UPDATE SET balance_qty = EXCLUDED.balance_qty;
-END;
-$$;
-
--- Calcular el stock real desde el ledger y sincronizar en warehouse_stock
-CREATE OR REPLACE FUNCTION sync_warehouse_stock(
-    p_company uuid,
-    p_warehouse uuid,
-    p_product uuid
-)
-RETURNS void
-LANGUAGE plpgsql
-AS $$
-DECLARE
-    v_qty numeric(18,6);
-BEGIN
-    SELECT COALESCE(SUM(qty_in - qty_out),0)
-    INTO v_qty
-    FROM stock_ledger
-    WHERE company_id = p_company
-      AND warehouse_id = p_warehouse
-      AND product_id = p_product
-      AND deleted_at IS NULL;
-
-    -- Usar la función base para actualizar
-    PERFORM update_warehouse_stock_balance(p_warehouse, p_product, v_qty);
-END;
-$$;
-
 -- Trigger que asegura sincronización en cada cambio del ledger
 CREATE OR REPLACE FUNCTION trigger_sync_warehouse_stock()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
+DECLARE
+    -- Para operaciones de UPDATE o DELETE, necesitamos recalcular el último estado.
+    v_last_balance_qty NUMERIC;
 BEGIN
-    IF TG_OP = 'INSERT' OR TG_OP = 'UPDATE' THEN
-        PERFORM sync_warehouse_stock(NEW.company_id, NEW.warehouse_id, NEW.product_id);
-    ELSIF TG_OP = 'DELETE' THEN
-        PERFORM sync_warehouse_stock(OLD.company_id, OLD.warehouse_id, OLD.product_id);
+    IF (TG_OP = 'INSERT') THEN
+        -- En un INSERT, el balance ya fue calculado por el trigger BEFORE.
+        -- Simplemente lo usamos para actualizar la tabla de stock agregado.
+        INSERT INTO warehouse_stock (warehouse_id, product_id, balance_qty)
+        VALUES (NEW.warehouse_id, NEW.product_id, NEW.balance_qty)
+        ON CONFLICT (warehouse_id, product_id)
+        DO UPDATE SET balance_qty = EXCLUDED.balance_qty;
+
+    ELSIF (TG_OP = 'UPDATE' OR TG_OP = 'DELETE') THEN
+        -- Si se actualiza o elimina una fila, el stock agregado debe reflejar
+        -- el último balance válido en el ledger para ese producto/almacén.
+        -- La fila afectada podría ser la OLD o la NEW.
+        
+        SELECT COALESCE(balance_qty, 0)
+        INTO v_last_balance_qty
+        FROM stock_ledger
+        WHERE company_id = COALESCE(NEW.company_id, OLD.company_id)
+          AND warehouse_id = COALESCE(NEW.warehouse_id, OLD.warehouse_id)
+          AND product_id = COALESCE(NEW.product_id, OLD.product_id)
+          AND deleted_at IS NULL
+        ORDER BY movement_date DESC, created_at DESC
+        LIMIT 1;
+
+        -- Actualizamos warehouse_stock con el último balance encontrado (o 0 si no hay ninguno).
+        INSERT INTO warehouse_stock (warehouse_id, product_id, balance_qty)
+        VALUES (COALESCE(NEW.warehouse_id, OLD.warehouse_id), COALESCE(NEW.product_id, OLD.product_id), COALESCE(v_last_balance_qty, 0))
+        ON CONFLICT (warehouse_id, product_id)
+        DO UPDATE SET balance_qty = EXCLUDED.balance_qty;
     END IF;
+
     RETURN NULL; -- AFTER triggers no necesitan devolver la fila
 END;
 $$;
 
--- Crear el trigger (solo una vez)
+-- No es necesario cambiar la definición del trigger, ya que la nueva función maneja todas las operaciones.
 DROP TRIGGER IF EXISTS trigger_sync_warehouse_stock ON stock_ledger;
 CREATE TRIGGER trigger_sync_warehouse_stock
 AFTER INSERT OR UPDATE OR DELETE ON stock_ledger
 FOR EACH ROW
 EXECUTE FUNCTION trigger_sync_warehouse_stock();
+
 
 -- ======================= FIN::ACTUALIZA STOCK EN ALMACENES =====================================
 
@@ -889,7 +877,7 @@ BEGIN
             v_sales_doc.doc_type,
             v_sales_doc.series,
             v_sales_doc.number,
-            COALESCE(v_sales_doc.op_type_kardex, '02'),
+            COALESCE(v_sales_doc.op_type_kardex, '01'),
             NEW.quantity_shipped,
             v_unit_cost,
             v_unit_cost * NEW.quantity_shipped,
@@ -908,3 +896,147 @@ AFTER INSERT ON shipment_items
 FOR EACH ROW
 EXECUTE FUNCTION process_shipment_for_ledger();
 
+-- Actualizar Precios Historicos de Productos
+CREATE OR REPLACE FUNCTION public.update_product_purchase_prices()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_purchase_doc public.purchase_docs%ROWTYPE;
+BEGIN
+    -- 1. Obtener los datos del documento de compra principal (la cabecera)
+    SELECT * INTO v_purchase_doc
+    FROM public.purchase_docs
+    WHERE id = NEW.purchase_doc_id;
+
+    -- 2. Asegurarnos de que el documento de compra existe y no está eliminado
+    IF FOUND AND v_purchase_doc.deleted_at IS NULL THEN
+        -- 3. Insertar el nuevo registro de precio de compra
+        INSERT INTO public.product_purchase_prices (
+            company_id,
+            product_id,
+            supplier_id,
+            currency_code,
+            unit_price, -- En esta tabla, unit_price se refiere al costo de compra
+            observed_at,
+            source_doc_type,
+            source_doc_series,
+            source_doc_number
+        )
+        VALUES (
+            v_purchase_doc.company_id,
+            NEW.product_id,
+            v_purchase_doc.supplier_id,
+            v_purchase_doc.currency_code,
+            NEW.unit_cost, -- Usamos el unit_cost del item de compra
+            v_purchase_doc.issue_date,
+            v_purchase_doc.doc_type,
+            v_purchase_doc.series,
+            v_purchase_doc.number
+        )
+        -- 4. Si ya existe un registro idéntico (por alguna razón), no hacer nada
+        ON CONFLICT DO NOTHING;
+    END IF;
+
+    RETURN NULL; -- El valor de retorno es ignorado en triggers AFTER
+END;
+$$;
+
+-- Eliminar el trigger si ya existe para evitar errores
+DROP TRIGGER IF EXISTS trg_after_insert_purchase_item_prices ON public.purchase_doc_items;
+
+-- Crear el trigger
+CREATE TRIGGER trg_after_insert_purchase_item_prices
+AFTER INSERT ON public.purchase_doc_items
+FOR EACH ROW
+EXECUTE FUNCTION public.update_product_purchase_prices();
+
+-- ================= product_price_history =================
+-- registrar tanto precios de compra como de venta.
+CREATE OR REPLACE FUNCTION public.update_product_price_history()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_price_type TEXT := TG_ARGV[0]; -- 'PURCHASE' o 'SALE'
+    v_company_id UUID;
+    v_source_doc_id UUID;
+    v_issue_date DATE;
+    v_currency_code VARCHAR(3);
+    v_unit_price NUMERIC(18,6);
+BEGIN
+    -- 1. Determinar el origen (compra o venta) y obtener los datos necesarios
+    IF v_price_type = 'PURCHASE' THEN
+        SELECT c.id, pd.id, pd.issue_date, pd.currency_code, pdi.unit_cost
+        INTO v_company_id, v_source_doc_id, v_issue_date, v_currency_code, v_unit_price
+        FROM public.purchase_doc_items pdi
+        JOIN public.purchase_docs pd ON pdi.purchase_doc_id = pd.id
+        JOIN public.companies c ON pd.company_id = c.id
+        WHERE pdi.id = NEW.id;
+
+    ELSIF v_price_type = 'SALE' THEN
+        SELECT c.id, sd.id, sd.issue_date, sd.currency_code, sdi.unit_price
+        INTO v_company_id, v_source_doc_id, v_issue_date, v_currency_code, v_unit_price
+        FROM public.sales_doc_items sdi
+        JOIN public.sales_docs sd ON sdi.sales_doc_id = sd.id
+        JOIN public.companies c ON sd.company_id = c.id
+        WHERE sdi.id = NEW.id;
+    ELSE
+        -- Si el argumento es inválido, no hacer nada
+        RETURN NULL;
+    END IF;
+
+    -- 2. "Cerrar" el precio anterior: buscar el precio activo (effective_to IS NULL)
+    -- y establecer su fecha de fin al día anterior al nuevo precio.
+    UPDATE public.product_price_history
+    SET effective_to = v_issue_date - INTERVAL '1 day'
+    WHERE company_id = v_company_id
+      AND product_id = NEW.product_id
+      AND price_type = v_price_type
+      AND effective_to IS NULL;
+
+    -- 3. Insertar el nuevo registro de historial de precio, dejándolo como el activo
+    INSERT INTO public.product_price_history (
+        company_id,
+        product_id,
+        price_type,
+        unit_price,
+        currency_code,
+        effective_from,
+        effective_to, -- Se deja en NULL para indicar que es el precio actual
+        source_doc_id
+    )
+    VALUES (
+        v_company_id,
+        NEW.product_id,
+        v_price_type,
+        v_unit_price,
+        v_currency_code,
+        v_issue_date,
+        NULL,
+        v_source_doc_id
+    );
+
+    RETURN NULL;
+END;
+$$;
+
+-- =========== Trigger para Compras ===========
+-- Eliminar el trigger si ya existe
+DROP TRIGGER IF EXISTS trg_after_insert_purchase_item_history ON public.purchase_doc_items;
+
+-- Crear el trigger
+CREATE TRIGGER trg_after_insert_purchase_item_history
+AFTER INSERT ON public.purchase_doc_items
+FOR EACH ROW
+EXECUTE FUNCTION public.update_product_price_history('PURCHASE');
+
+-- =========== Trigger para Ventas ===========
+-- Eliminar el trigger si ya existe
+DROP TRIGGER IF EXISTS trg_after_insert_sale_item_history ON public.sales_doc_items;
+
+-- Crear el trigger
+CREATE TRIGGER trg_after_insert_sale_item_history
+AFTER INSERT ON public.sales_doc_items
+FOR EACH ROW
+EXECUTE FUNCTION public.update_product_price_history('SALE');
