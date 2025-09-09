@@ -167,10 +167,11 @@ AS $$
 $$;
 
 -- ==================== STOCK LEDGER
--- PASO 15: FUNCIONES OPTIMIZADAS PARA CÁLCULO DE INVENTARIO (FUSIONADO)
+-- PASO 15: FUNCIONES OPTIMIZADAS PARA CÁLCULO DE INVENTARIO
 -- ============================================================================
 
 -- calcular los balances de la nueva fila en el momento de insertarla.
+-- registros del mismo día insertados previamente.
 CREATE OR REPLACE FUNCTION compute_stock_ledger_balances()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -186,7 +187,7 @@ BEGIN
   FROM companies c
   WHERE c.id = NEW.company_id;
 
-  -- Obtener el último balance válido (excluyendo registros eliminados)
+  -- Obtener el último balance válido (excluyendo registros eliminados y el actual)
   SELECT COALESCE(balance_qty, 0), COALESCE(balance_total_cost, 0), COALESCE(balance_unit_cost, 0)
   INTO prev_qty, prev_total, prev_unit
   FROM stock_ledger
@@ -195,7 +196,7 @@ BEGIN
     AND product_id = NEW.product_id
     AND deleted_at IS NULL
     AND (movement_date < NEW.movement_date 
-         OR (movement_date = NEW.movement_date AND created_at < NEW.created_at))
+         OR (movement_date = NEW.movement_date AND created_at < clock_timestamp()))
   ORDER BY movement_date DESC, created_at DESC
   LIMIT 1;
 
@@ -208,26 +209,24 @@ BEGIN
     NEW.total_cost_out := NEW.qty_out * NEW.unit_cost_out;
   END IF;
 
+  -- Depuración: mostrar valores previos y nuevos
+  RAISE NOTICE 'prev_qty: %, prev_total: %, prev_unit: %', prev_qty, prev_total, prev_unit;
+  RAISE NOTICE 'NEW.qty_in: %, NEW.total_cost_in: %, NEW.unit_cost_in: %', NEW.qty_in, NEW.total_cost_in, NEW.unit_cost_in;
+  RAISE NOTICE 'NEW.qty_out: %, NEW.total_cost_out: %, NEW.unit_cost_out: %', NEW.qty_out, NEW.total_cost_out, NEW.unit_cost_out;
+  RAISE NOTICE 'valuation_method: %', valuation_method;
+
   -- Calcular nuevos balances según el método de valuación
-  IF valuation_method = 'PROMEDIO_MOVIL' THEN
-    IF NEW.qty_in > 0 THEN
-      NEW.balance_qty := prev_qty + NEW.qty_in;
-      NEW.balance_total_cost := prev_total + COALESCE(NEW.total_cost_in, 0);
-      NEW.balance_unit_cost := CASE 
-        WHEN NEW.balance_qty > 0 THEN NEW.balance_total_cost / NEW.balance_qty 
-        ELSE 0 
-      END;
-    ELSIF NEW.qty_out > 0 THEN
-      NEW.balance_qty := GREATEST(prev_qty - NEW.qty_out, 0);
-      NEW.balance_total_cost := GREATEST(prev_total - COALESCE(NEW.total_cost_out, 0), 0);
-      NEW.balance_unit_cost := CASE 
-        WHEN NEW.balance_qty > 0 THEN NEW.balance_total_cost / NEW.balance_qty 
-        ELSE 0 
-      END;
-    END IF;
-  ELSIF valuation_method = 'FIFO' THEN
-    NEW.balance_qty := prev_qty + COALESCE(NEW.qty_in, 0) - COALESCE(NEW.qty_out, 0);
-    NEW.balance_total_cost := prev_total + COALESCE(NEW.total_cost_in, 0) - COALESCE(NEW.total_cost_out, 0);
+  
+  IF NEW.qty_in > 0 THEN
+    NEW.balance_qty := prev_qty + NEW.qty_in;
+    NEW.balance_total_cost := prev_total + COALESCE(NEW.total_cost_in, 0);
+    NEW.balance_unit_cost := CASE 
+      WHEN NEW.balance_qty > 0 THEN NEW.balance_total_cost / NEW.balance_qty 
+      ELSE 0 
+    END;
+  ELSIF NEW.qty_out > 0 THEN
+    NEW.balance_qty := GREATEST(prev_qty - NEW.qty_out, 0);
+    NEW.balance_total_cost := GREATEST(prev_total - COALESCE(NEW.total_cost_out, 0), 0);
     NEW.balance_unit_cost := CASE 
       WHEN NEW.balance_qty > 0 THEN NEW.balance_total_cost / NEW.balance_qty 
       ELSE 0 
@@ -249,6 +248,51 @@ BEFORE INSERT ON stock_ledger
 FOR EACH ROW
 EXECUTE FUNCTION compute_stock_ledger_balances();
 
+-- Función para manejar el caso especial del primer registro después de una actualización.
+-- Solo actualiza los balances si es el primer registro y los valores no coinciden.
+-- Función para manejar el caso especial del primer registro antes de la inserción.
+-- Modifica directamente NEW si es el primer registro, asegurando que los balances coincidan exactamente con los valores de entrada.
+
+-- Función que ejecuta la lógica
+CREATE OR REPLACE FUNCTION fix_stock_ledger_balances()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    rec RECORD;
+BEGIN
+    -- Buscar filas con balance_qty = 0, operación 02 y que sean únicas por empresa, almacén y producto
+    FOR rec IN
+        SELECT DISTINCT ON (company_id, warehouse_id, product_id)
+               id, company_id, warehouse_id, product_id,
+               qty_in, unit_cost_in, total_cost_in
+        FROM stock_ledger
+        WHERE balance_qty = 0
+          AND operation_type = '02'
+        ORDER BY company_id, warehouse_id, product_id, created_at DESC
+    LOOP
+        -- Actualizar con los datos de entrada
+        UPDATE stock_ledger
+        SET balance_qty = rec.qty_in,
+            balance_unit_cost = rec.unit_cost_in,
+            balance_total_cost = rec.total_cost_in
+        WHERE id = rec.id;
+    END LOOP;
+
+    RETURN NEW;
+END;
+$$;
+
+
+-- Trigger para ejecutarlo después de cada insert
+DROP TRIGGER IF EXISTS trg_fix_stock_ledger_balances ON stock_ledger;
+
+CREATE TRIGGER trg_fix_stock_ledger_balances
+AFTER INSERT ON stock_ledger
+FOR EACH ROW
+EXECUTE FUNCTION fix_stock_ledger_balances();
+
+
 
 -- ============== RECOMPUTE STOCK LEDGER BALANCES =====================
 
@@ -265,131 +309,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- offline, para recalcular hacia atrás y hacia adelante, útil cuando corriges registros o cambias datos históricos.
 
-CREATE OR REPLACE FUNCTION recompute_stock_ledger_balances(
-    p_company_id UUID,
-    p_warehouse_id UUID,
-    p_product_id UUID,
-    p_start_date DATE
-)
-RETURNS void
-LANGUAGE plpgsql
-AS $$
-DECLARE
-    r RECORD;
-    prev_qty numeric(18,6) := 0;
-    prev_total numeric(18,6) := 0;
-    prev_unit numeric(18,6) := 0;
-    valuation_method text;
-BEGIN
-    -- Obtener método de valuación
-    SELECT c.valuation_method INTO valuation_method
-    FROM companies c
-    WHERE c.id = p_company_id;
 
-    -- Encontrar el balance previo justo antes de p_start_date
-    SELECT COALESCE(balance_qty, 0), COALESCE(balance_total_cost, 0), COALESCE(balance_unit_cost, 0)
-    INTO prev_qty, prev_total, prev_unit
-    FROM stock_ledger
-    WHERE company_id = p_company_id
-      AND warehouse_id = p_warehouse_id
-      AND product_id = p_product_id
-      AND movement_date < p_start_date
-      AND deleted_at IS NULL
-    ORDER BY movement_date DESC, created_at DESC
-    LIMIT 1;
-
-    -- Loop sobre movimientos a partir de p_start_date, en orden
-    FOR r IN
-        SELECT *
-        FROM stock_ledger
-        WHERE company_id = p_company_id
-          AND warehouse_id = p_warehouse_id
-          AND product_id = p_product_id
-          AND movement_date >= p_start_date
-          AND deleted_at IS NULL
-        ORDER BY movement_date ASC, created_at ASC
-    LOOP
-        -- Recalcular costos si es necesario
-        IF r.qty_in > 0 AND r.total_cost_in IS NULL THEN
-            r.total_cost_in := r.qty_in * COALESCE(r.unit_cost_in, 0);
-        END IF;
-        IF r.qty_out > 0 AND r.total_cost_out IS NULL THEN
-            r.unit_cost_out := prev_unit;
-            r.total_cost_out := r.qty_out * r.unit_cost_out;
-        END IF;
-
-        -- Recalcular balances según método
-        IF valuation_method = 'PROMEDIO_MOVIL' THEN
-            IF r.qty_in > 0 THEN
-                r.balance_qty := prev_qty + r.qty_in;
-                r.balance_total_cost := prev_total + r.total_cost_in;
-                r.balance_unit_cost := CASE WHEN r.balance_qty > 0 THEN r.balance_total_cost / r.balance_qty ELSE 0 END;
-            ELSIF r.qty_out > 0 THEN
-                r.balance_qty := GREATEST(prev_qty - r.qty_out, 0);
-                r.balance_total_cost := GREATEST(prev_total - r.total_cost_out, 0);
-                r.balance_unit_cost := CASE WHEN r.balance_qty > 0 THEN r.balance_total_cost / r.balance_qty ELSE 0 END;
-            ELSE
-                r.balance_qty := prev_qty;
-                r.balance_total_cost := prev_total;
-                r.balance_unit_cost := prev_unit;
-            END IF;
-        ELSIF valuation_method = 'FIFO' THEN
-            r.balance_qty := GREATEST(prev_qty + r.qty_in - r.qty_out, 0);
-            r.balance_total_cost := GREATEST(prev_total + r.total_cost_in - r.total_cost_out, 0);
-            r.balance_unit_cost := CASE WHEN r.balance_qty > 0 THEN r.balance_total_cost / r.balance_qty ELSE 0 END;
-        END IF;
-
-        r.balance_qty := COALESCE(r.balance_qty, 0);
-        r.balance_total_cost := COALESCE(r.balance_total_cost, 0);
-        r.balance_unit_cost := COALESCE(r.balance_unit_cost, 0);
-
-        -- Actualizar el row con los nuevos valores
-        UPDATE stock_ledger
-        SET
-            balance_qty = r.balance_qty,
-            balance_unit_cost = r.balance_unit_cost,
-            balance_total_cost = r.balance_total_cost,
-            unit_cost_in = r.unit_cost_in,
-            total_cost_in = r.total_cost_in,
-            unit_cost_out = r.unit_cost_out,
-            total_cost_out = r.total_cost_out
-        WHERE id = r.id AND movement_date = r.movement_date;
-
-        -- Actualizar prev para el siguiente row
-        prev_qty := r.balance_qty;
-        prev_total := r.balance_total_cost;
-        prev_unit := r.balance_unit_cost;
-    END LOOP;
-END;
-$$;
-
--- Función del trigger para AFTER UPDATE
-CREATE OR REPLACE FUNCTION trigger_recompute_stock_ledger_balances()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-AS $$
-BEGIN
-    -- Recalcular a partir de la fecha del movimiento actualizado
-    PERFORM recompute_stock_ledger_balances(NEW.company_id, NEW.warehouse_id, NEW.product_id, NEW.movement_date);
-    -- También sincronizar warehouse_stock (por si cambia balance final)
-    PERFORM sync_warehouse_stock(NEW.company_id, NEW.warehouse_id, NEW.product_id);
-    RETURN NULL;
-END;
-$$;
-
--- Crear el trigger AFTER UPDATE (solo si cambian columnas clave)
-DROP TRIGGER IF EXISTS after_stock_ledger_update ON stock_ledger;
-CREATE TRIGGER after_stock_ledger_update
-AFTER UPDATE ON stock_ledger
-FOR EACH ROW
-WHEN (
-    OLD.qty_in IS DISTINCT FROM NEW.qty_in OR
-    OLD.qty_out IS DISTINCT FROM NEW.qty_out OR
-    OLD.total_cost_in IS DISTINCT FROM NEW.total_cost_in OR
-    OLD.total_cost_out IS DISTINCT FROM NEW.total_cost_out OR
-    OLD.deleted_at IS DISTINCT FROM NEW.deleted_at
-)
-EXECUTE FUNCTION trigger_recompute_stock_ledger_balances();
 
 
 -- ======================= INICIO::ACTUALIZA STOCK EN ALMACENES =====================================
@@ -756,6 +676,19 @@ DECLARE
     v_reception receptions%ROWTYPE;
     v_unit_cost NUMERIC;
     v_total_cost NUMERIC;
+
+    -- Inventario
+    prev_qty numeric(18,6) := 0;
+    prev_total numeric(18,6) := 0;
+    prev_unit numeric(18,6) := 0;
+
+    -- Balance
+    balance_qty numeric(18,6) := 0;
+    balance_total_cost numeric(18,6) := 0;
+    balance_unit_cost numeric(18,6) := 0;
+
+    count_purchase_doc INTEGER;
+
 BEGIN
     -- Obtener la recepción
     SELECT * INTO v_reception
@@ -766,6 +699,8 @@ BEGIN
     SELECT * INTO v_purchase_doc
     FROM purchase_docs
     WHERE id = v_reception.purchase_doc_id;
+
+
 
     IF v_purchase_doc.deleted_at IS NULL THEN
         v_unit_cost := v_purchase_doc.exchange_rate * NEW.unit_cost;
@@ -783,6 +718,10 @@ BEGIN
             qty_in, --cantidad recibida
             unit_cost_in,  -- costo unitario recibido
             total_cost_in,
+            balance_qty,
+            balance_unit_cost,
+            balance_total_cost,
+
             original_currency_code,
             exchange_rate,
             original_unit_cost_in,
@@ -803,6 +742,11 @@ BEGIN
             NEW.quantity_received, -- cantidad recibida
             v_unit_cost,
             v_total_cost,
+
+            balance_qty,
+            balance_unit_cost,
+            balance_total_cost,
+
             v_purchase_doc.currency_code,
             v_purchase_doc.exchange_rate,
             NEW.unit_cost,
@@ -1040,3 +984,326 @@ CREATE TRIGGER trg_after_insert_sale_item_history
 AFTER INSERT ON public.sales_doc_items
 FOR EACH ROW
 EXECUTE FUNCTION public.update_product_price_history('SALE');
+
+
+-- =========== Trigger para Costo de Ventas ===========
+
+-- 1. Crear tabla para almacenar el reporte de costo de ventas
+CREATE TABLE IF NOT EXISTS cost_of_sales_report (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    period DATE NOT NULL, -- Primer día del mes (YYYY-MM-01)
+    initial_quantity NUMERIC(18,6) DEFAULT 0,
+    initial_total_cost NUMERIC(18,6) DEFAULT 0,
+    entries_quantity NUMERIC(18,6) DEFAULT 0,
+    entries_total_cost NUMERIC(18,6) DEFAULT 0,
+    exits_quantity NUMERIC(18,6) DEFAULT 0,
+    exits_total_cost NUMERIC(18,6) DEFAULT 0,
+    final_quantity NUMERIC(18,6) DEFAULT 0,
+    final_total_cost NUMERIC(18,6) DEFAULT 0,
+    sales_quantity NUMERIC(18,6) DEFAULT 0,
+    sales_total_amount NUMERIC(18,6) DEFAULT 0,
+    cost_of_sales_total NUMERIC(18,6) DEFAULT 0,
+    profit NUMERIC(18,6) DEFAULT 0,
+    margin NUMERIC(5,4) DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(company_id, product_id, period)
+);
+
+-- 2. Vista para el reporte en tiempo real
+CREATE OR REPLACE VIEW v_cost_of_sales_report AS
+WITH period_data AS (
+    SELECT 
+        DATE_TRUNC('month', movement_date)::DATE as period,
+        company_id,
+        product_id,
+        -- Inventario inicial (último balance del mes anterior)
+        COALESCE(LAG(balance_qty) OVER (PARTITION BY company_id, product_id ORDER BY movement_date), 0) as initial_qty,
+        COALESCE(LAG(balance_total_cost) OVER (PARTITION BY company_id, product_id ORDER BY movement_date), 0) as initial_cost,
+        -- Entradas y salidas del mes
+        SUM(qty_in) OVER (PARTITION BY company_id, product_id, DATE_TRUNC('month', movement_date)) as entries_qty,
+        SUM(total_cost_in) OVER (PARTITION BY company_id, product_id, DATE_TRUNC('month', movement_date)) as entries_cost,
+        SUM(qty_out) OVER (PARTITION BY company_id, product_id, DATE_TRUNC('month', movement_date)) as exits_qty,
+        SUM(total_cost_out) OVER (PARTITION BY company_id, product_id, DATE_TRUNC('month', movement_date)) as exits_cost,
+        -- Saldo final
+        balance_qty as final_qty,
+        balance_total_cost as final_cost
+    FROM stock_ledger
+    WHERE deleted_at IS NULL
+),
+sales_data AS (
+    SELECT
+        DATE_TRUNC('month', s.issue_date)::DATE as period,
+        s.company_id,
+        si.product_id,
+        SUM(si.quantity) as sales_qty,
+        SUM(si.total_line) as sales_amount
+    FROM sales_docs s
+    JOIN sales_doc_items si ON s.id = si.sales_doc_id
+    WHERE s.deleted_at IS NULL
+    GROUP BY 1, 2, 3
+)
+SELECT
+    pd.period,
+    c.id as company_id,
+    c.legal_name as company_name,
+    p.id as product_id,
+    p.sku,
+    p.name as product_name,
+    pd.initial_qty as initial_quantity,
+    pd.initial_cost as initial_total_cost,
+    pd.entries_qty as entries_quantity,
+    pd.entries_cost as entries_total_cost,
+    pd.exits_qty as exits_quantity,
+    pd.exits_cost as exits_total_cost,
+    pd.final_qty as final_quantity,
+    pd.final_cost as final_total_cost,
+    COALESCE(sd.sales_qty, 0) as sales_quantity,
+    COALESCE(sd.sales_amount, 0) as sales_total_amount,
+    pd.exits_cost as cost_of_sales_total,
+    COALESCE(sd.sales_amount, 0) - pd.exits_cost as profit,
+    CASE 
+        WHEN COALESCE(sd.sales_amount, 0) > 0 
+        THEN ((COALESCE(sd.sales_amount, 0) - pd.exits_cost) / sd.sales_amount) * 100 
+        ELSE 0 
+    END as margin
+FROM period_data pd
+JOIN companies c ON c.id = pd.company_id
+JOIN products p ON p.id = pd.product_id
+LEFT JOIN sales_data sd ON sd.period = pd.period 
+    AND sd.company_id = pd.company_id 
+    AND sd.product_id = pd.product_id;
+
+-- 3. Función auxiliar para actualizar un registro específico
+CREATE OR REPLACE FUNCTION update_single_cost_report(
+    p_company_id UUID,
+    p_product_id UUID,
+    p_period DATE
+)
+RETURNS void
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    INSERT INTO cost_of_sales_report (
+        company_id, product_id, period,
+        initial_quantity, initial_total_cost,
+        entries_quantity, entries_total_cost,
+        exits_quantity, exits_total_cost,
+        final_quantity, final_total_cost,
+        sales_quantity, sales_total_amount,
+        cost_of_sales_total, profit, margin
+    )
+    SELECT
+        company_id, product_id, period,
+        initial_quantity, initial_total_cost,
+        entries_quantity, entries_total_cost,
+        exits_quantity, exits_total_cost,
+        final_quantity, final_total_cost,
+        sales_quantity, sales_total_amount,
+        cost_of_sales_total, profit, margin
+    FROM v_cost_of_sales_report
+    WHERE company_id = p_company_id
+        AND product_id = p_product_id
+        AND period = p_period
+    ON CONFLICT (company_id, product_id, period)
+    DO UPDATE SET
+        initial_quantity = EXCLUDED.initial_quantity,
+        initial_total_cost = EXCLUDED.initial_total_cost,
+        entries_quantity = EXCLUDED.entries_quantity,
+        entries_total_cost = EXCLUDED.entries_total_cost,
+        exits_quantity = EXCLUDED.exits_quantity,
+        exits_total_cost = EXCLUDED.exits_total_cost,
+        final_quantity = EXCLUDED.final_quantity,
+        final_total_cost = EXCLUDED.final_total_cost,
+        sales_quantity = EXCLUDED.sales_quantity,
+        sales_total_amount = EXCLUDED.sales_total_amount,
+        cost_of_sales_total = EXCLUDED.cost_of_sales_total,
+        profit = EXCLUDED.profit,
+        margin = EXCLUDED.margin,
+        updated_at = NOW();
+END;
+$$;
+
+-- 4. Función principal para actualizar el reporte
+CREATE OR REPLACE FUNCTION update_cost_of_sales_report()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_company_id UUID;
+    v_product_id UUID;
+    v_period DATE;
+BEGIN
+    -- Determinar los valores según la tabla y operación
+    IF TG_TABLE_NAME = 'stock_ledger' THEN
+        IF TG_OP = 'INSERT' OR TG_OP = 'UPDATE' THEN
+            v_company_id := NEW.company_id;
+            v_product_id := NEW.product_id;
+            v_period := DATE_TRUNC('month', NEW.movement_date)::DATE;
+        ELSIF TG_OP = 'DELETE' THEN
+            v_company_id := OLD.company_id;
+            v_product_id := OLD.product_id;
+            v_period := DATE_TRUNC('month', OLD.movement_date)::DATE;
+        END IF;
+    ELSIF TG_TABLE_NAME = 'sales_docs' THEN
+        -- Para sales_docs, necesitamos obtener los productos afectados
+        IF TG_OP = 'INSERT' OR TG_OP = 'UPDATE' THEN
+            v_company_id := NEW.company_id;
+            v_period := DATE_TRUNC('month', NEW.issue_date)::DATE;
+            
+            -- Actualizar todos los productos de este documento de venta
+            FOR v_product_id IN 
+                SELECT DISTINCT product_id 
+                FROM sales_doc_items 
+                WHERE sales_doc_id = NEW.id
+            LOOP
+                PERFORM update_single_cost_report(v_company_id, v_product_id, v_period);
+            END LOOP;
+            RETURN NULL;
+        ELSIF TG_OP = 'DELETE' THEN
+            v_company_id := OLD.company_id;
+            v_period := DATE_TRUNC('month', OLD.issue_date)::DATE;
+            
+            -- Actualizar todos los productos de este documento de venta
+            FOR v_product_id IN 
+                SELECT DISTINCT product_id 
+                FROM sales_doc_items 
+                WHERE sales_doc_id = OLD.id
+            LOOP
+                PERFORM update_single_cost_report(v_company_id, v_product_id, v_period);
+            END LOOP;
+            RETURN NULL;
+        END IF;
+    ELSIF TG_TABLE_NAME = 'sales_doc_items' THEN
+        IF TG_OP = 'INSERT' OR TG_OP = 'UPDATE' THEN
+            SELECT company_id, DATE_TRUNC('month', issue_date)::DATE 
+            INTO v_company_id, v_period
+            FROM sales_docs WHERE id = NEW.sales_doc_id;
+            
+            v_product_id := NEW.product_id;
+        ELSIF TG_OP = 'DELETE' THEN
+            SELECT company_id, DATE_TRUNC('month', issue_date)::DATE 
+            INTO v_company_id, v_period
+            FROM sales_docs WHERE id = OLD.sales_doc_id;
+            
+            v_product_id := OLD.product_id;
+        END IF;
+    END IF;
+
+    -- Actualizar el reporte para el producto y periodo específicos
+    PERFORM update_single_cost_report(v_company_id, v_product_id, v_period);
+    
+    RETURN NULL;
+END;
+$$;
+
+-- 5. Crear los triggers
+DROP TRIGGER IF EXISTS trigger_update_cost_report_stock ON stock_ledger;
+DROP TRIGGER IF EXISTS trigger_update_cost_report_sales ON sales_docs;
+DROP TRIGGER IF EXISTS trigger_update_cost_report_sales_items ON sales_doc_items;
+
+CREATE TRIGGER trigger_update_cost_report_stock
+    AFTER INSERT OR UPDATE OR DELETE ON stock_ledger
+    FOR EACH ROW
+    EXECUTE FUNCTION update_cost_of_sales_report();
+
+CREATE TRIGGER trigger_update_cost_report_sales
+    AFTER INSERT OR UPDATE OR DELETE ON sales_docs
+    FOR EACH ROW
+    EXECUTE FUNCTION update_cost_of_sales_report();
+
+CREATE TRIGGER trigger_update_cost_report_sales_items
+    AFTER INSERT OR UPDATE OR DELETE ON sales_doc_items
+    FOR EACH ROW
+    EXECUTE FUNCTION update_cost_of_sales_report();
+
+
+-- ===================== PRODUCTS =====================
+CREATE OR REPLACE FUNCTION list_products_full(
+    p_company_id UUID,
+    p_price_list_id UUID DEFAULT NULL
+)
+RETURNS TABLE (
+    product_id UUID,
+    sku TEXT,
+    barcode TEXT,
+    product_name TEXT,
+    description TEXT,
+    brand_name TEXT,
+    category_name TEXT,
+    unit_code TEXT,
+    main_image TEXT,
+    location TEXT,
+    unit_price NUMERIC,
+    currency_code VARCHAR(3),
+    discount_value NUMERIC,
+    metadata JSONB
+)
+LANGUAGE sql
+AS $$
+    SELECT 
+        p.id AS product_id,
+        p.sku,
+        p.barcode,
+        p.name AS product_name,
+        p.description,
+        b.name AS brand_name,
+        c.name AS category_name,
+        p.unit_code,
+        -- Imagen principal
+        (SELECT pi.storage_path 
+         FROM product_images pi 
+         WHERE pi.product_id = p.id 
+           AND pi.is_primary = true 
+         LIMIT 1) AS main_image,
+        -- Ubicación principal en almacén
+        (SELECT CONCAT(wz.code, ' / ', wl.position_x, ',', wl.position_y, ',', wl.position_z)
+         FROM product_location wl
+         JOIN warehouse_zones wz ON wz.id = wl.warehouse_zone_id
+         WHERE wl.product_id = p.id 
+           AND wl.es_principal = true
+         LIMIT 1) AS location,
+        -- Precio: si pasa price_list_id, usarlo. Si no, precio de venta más reciente.
+        COALESCE(
+            (SELECT pli.unit_price
+             FROM price_list_items pli
+             WHERE pli.product_id = p.id 
+               AND pli.price_list_id = p_price_list_id
+             ORDER BY pli.valid_from DESC
+             LIMIT 1),
+            (SELECT ph.unit_price
+             FROM product_price_history ph
+             WHERE ph.product_id = p.id
+               AND ph.price_type = 'SALE'
+             ORDER BY ph.effective_from DESC
+             LIMIT 1)
+        ) AS unit_price,
+        COALESCE(
+            (SELECT pl.currency_code
+             FROM price_lists pl
+             WHERE pl.id = p_price_list_id
+             LIMIT 1),
+            (SELECT ph.currency_code
+             FROM product_price_history ph
+             WHERE ph.product_id = p.id
+               AND ph.price_type = 'SALE'
+             ORDER BY ph.effective_from DESC
+             LIMIT 1)
+        ) AS currency_code,
+        -- Descuento si aplica
+        (SELECT d.value
+         FROM discounts d
+         JOIN discount_products dp ON dp.discount_id = d.id
+         WHERE dp.product_id = p.id
+           AND d.is_active = true
+           AND CURRENT_DATE BETWEEN d.valid_from AND COALESCE(d.valid_to, CURRENT_DATE)
+         LIMIT 1) AS discount_value,
+        p.metadata
+    FROM products p
+    JOIN brands b ON b.id = p.brand_id
+    JOIN categories c ON c.id = p.category_id
+    WHERE p.company_id = p_company_id
+      AND p.active = true;
+$$;

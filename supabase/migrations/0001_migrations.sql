@@ -1151,6 +1151,11 @@ CREATE TABLE public.stock_ledger (
 
 CREATE INDEX idx_stock_ledger_operation_type ON stock_ledger(operation_type, movement_date);
 
+-- Primero, cambiar el DEFAULT de created_at para usar clock_timestamp() en lugar de NOW(),
+-- para que cada inserción tenga un timestamp único, incluso dentro de la misma transacción.
+ALTER TABLE public.stock_ledger
+ALTER COLUMN created_at SET DEFAULT clock_timestamp();
+
 -- Crear particiones para los próximos 24 meses
 DO $$
 DECLARE

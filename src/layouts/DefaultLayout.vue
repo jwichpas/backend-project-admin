@@ -96,6 +96,29 @@
             </router-link>
           </li>
 
+          <!-- Administration Section -->
+          <li class="mt-6">
+            <p v-if="!isCollapsed" class="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Administración</p>
+          </li>
+          <li>
+            <router-link to="/companies" class="group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors" :class="getNavClass('/companies')">
+              <Building class="mr-3 h-5 w-5 transition-colors" :class="getIconClass('/companies')" />
+              <span v-if="!isCollapsed">Empresas</span>
+            </router-link>
+          </li>
+          <li>
+            <router-link to="/branches" class="group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors" :class="getNavClass('/branches')">
+              <MapPin class="mr-3 h-5 w-5 transition-colors" :class="getIconClass('/branches')" />
+              <span v-if="!isCollapsed">Sucursales</span>
+            </router-link>
+          </li>
+          <li>
+            <router-link to="/sunat" class="group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors" :class="getNavClass('/sunat')">
+              <FileText class="mr-3 h-5 w-5 transition-colors" :class="getIconClass('/sunat')" />
+              <span v-if="!isCollapsed">Catálogos SUNAT</span>
+            </router-link>
+          </li>
+
           <!-- Settings -->
           <li class="mt-6">
             <router-link to="/settings" class="group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors" :class="getNavClass('/settings')">
@@ -116,33 +139,47 @@
         </div>
         <div class="flex items-center space-x-3">
           <!-- Company Selector -->
-          <div v-if="companyStore.companies.length > 0" class="min-w-[200px]">
+          <div v-if="companiesStore.userCompanies.length > 0" class="min-w-[200px]">
             <div class="flex items-center gap-2 mb-1">
               <Building class="h-3 w-3 text-muted-foreground" />
               <span class="text-xs font-medium text-muted-foreground">Empresa</span>
             </div>
-            <Select
+            <select
               v-model="selectedCompanyId"
-              :options="companyOptions"
-              placeholder="Seleccionar empresa"
-              size="sm"
-              class="w-full"
-            />
+              class="w-full px-2 py-1 text-xs border border-input rounded-md bg-background"
+              @change="onCompanyChange"
+            >
+              <option value="">Seleccionar empresa</option>
+              <option
+                v-for="userCompany in companiesStore.userCompanies"
+                :key="userCompany.company.id"
+                :value="userCompany.company.id"
+              >
+                {{ userCompany.company.trade_name || userCompany.company.legal_name }}
+              </option>
+            </select>
           </div>
           
           <!-- Branch Selector -->
-          <div v-if="companyStore.currentCompanyBranches.length > 1" class="min-w-[160px]">
+          <div v-if="availableBranches.length > 0" class="min-w-[160px]">
             <div class="flex items-center gap-2 mb-1">
               <MapPin class="h-3 w-3 text-muted-foreground" />
               <span class="text-xs font-medium text-muted-foreground">Sucursal</span>
             </div>
-            <Select
+            <select
               v-model="selectedBranchId"
-              :options="branchOptions"
-              placeholder="Seleccionar sucursal"
-              size="sm"
-              class="w-full"
-            />
+              class="w-full px-2 py-1 text-xs border border-input rounded-md bg-background"
+              @change="onBranchChange"
+            >
+              <option value="">Todas las sucursales</option>
+              <option
+                v-for="branch in availableBranches"
+                :key="branch.id"
+                :value="branch.id"
+              >
+                {{ branch.code }} - {{ branch.name }}
+              </option>
+            </select>
           </div>
 
           <!-- Dark Mode Toggle -->
@@ -187,19 +224,21 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { useCompanyStore } from '@/stores/company'
+import { useCompaniesStore } from '@/stores/companies'
+import { useBranchesStore } from '@/stores/branches'
 import { useThemeStore } from '@/stores/theme'
 import { useAuthStore } from '@/stores/auth'
 import { 
   Menu, LayoutDashboard, Settings, Moon, Sun, User,
   Receipt, Users, ShoppingCart, Truck, Package, Warehouse, BarChart3,
-  Building, MapPin
+  Building, MapPin, FileText
 } from 'lucide-vue-next'
 import Select from '@/components/ui/Select.vue'
 
 const route = useRoute()
 const router = useRouter()
-const companyStore = useCompanyStore()
+const companiesStore = useCompaniesStore()
+const branchesStore = useBranchesStore()
 const themeStore = useThemeStore()
 const authStore = useAuthStore()
 
@@ -209,43 +248,62 @@ const toggleCollapse = () => { isCollapsed.value = !isCollapsed.value }
 
 // Company and Branch selection
 const selectedCompanyId = ref<string | null>(null)
-const selectedBranchId = ref<string | null>(null)
+const selectedBranchId = ref<string | null>(localStorage.getItem('selectedBranchId') || null)
 
-// Computed options for selectors
-const companyOptions = computed(() => 
-  companyStore.companies.map(company => ({
-    value: company.id,
-    label: company.trade_name || company.legal_name
-  }))
-)
-
-const branchOptions = computed(() => 
-  companyStore.currentCompanyBranches.map(branch => ({
-    value: branch.id,
-    label: branch.name
-  }))
-)
-
-// Watchers for selection changes
-watch(selectedCompanyId, (newId) => {
-  if (newId) {
-    const company = companyStore.companies.find(c => c.id === newId)
-    if (company) {
-      companyStore.selectCompany(company)
-      // Reset branch selection when company changes
-      selectedBranchId.value = null
-    }
-  }
+// Available branches for the selected company
+const availableBranches = computed(() => {
+  return selectedCompanyId.value ? branchesStore.branches : []
 })
 
-watch(selectedBranchId, (newId) => {
-  if (newId) {
-    const branch = companyStore.currentCompanyBranches.find(b => b.id === newId)
-    if (branch) {
-      companyStore.selectBranch(branch)
-    }
-  }
+// Current selected company name for display
+const selectedCompanyName = computed(() => {
+  const userCompany = companiesStore.userCompanies.find(uc => uc.company.id === selectedCompanyId.value)
+  return userCompany ? (userCompany.company.trade_name || userCompany.company.legal_name) : ''
 })
+
+// Current selected branch name for display
+const selectedBranchName = computed(() => {
+  const branch = branchesStore.branches.find(b => b.id === selectedBranchId.value)
+  return branch ? `${branch.code} - ${branch.name}` : ''
+})
+
+// Handlers for selector changes
+const onCompanyChange = async () => {
+  if (selectedCompanyId.value) {
+    // Set current company in the store
+    const userCompany = companiesStore.userCompanies.find(uc => uc.company.id === selectedCompanyId.value)
+    if (userCompany) {
+      companiesStore.setCurrentCompany(userCompany.company)
+    }
+    
+    // Load branches for the selected company
+    await branchesStore.fetchAll(selectedCompanyId.value)
+    
+    // Check if current selected branch belongs to this company
+    const savedBranchId = localStorage.getItem('selectedBranchId')
+    if (savedBranchId && branchesStore.branches.find(b => b.id === savedBranchId)) {
+      selectedBranchId.value = savedBranchId
+    } else {
+      selectedBranchId.value = ''
+      localStorage.removeItem('selectedBranchId')
+    }
+  } else {
+    companiesStore.currentCompany = null
+    branchesStore.reset()
+    selectedBranchId.value = ''
+    localStorage.removeItem('selectedBranchId')
+  }
+}
+
+const onBranchChange = () => {
+  // Save selected branch to localStorage for persistence
+  if (selectedBranchId.value) {
+    localStorage.setItem('selectedBranchId', selectedBranchId.value)
+  } else {
+    localStorage.removeItem('selectedBranchId')
+  }
+  console.log('Branch changed to:', selectedBranchId.value)
+}
 
 // Page title helper
 const getPageTitle = () => {
@@ -257,7 +315,10 @@ const getPageTitle = () => {
     'inventory': 'Inventario',
     'customers': 'Clientes',
     'suppliers': 'Proveedores',
+    'map': 'Mapa',
     'reports': 'Reportes',
+    'companies': 'Empresas',
+    'branches': 'Sucursales',
     'settings': 'Configuración'
   }
   return routeNames[route.name as string] || 'Sistema ERP'
@@ -290,17 +351,24 @@ const getIconClass = (path: string) => {
 }
 
 onMounted(async () => {
-  await companyStore.fetchCompanies()
-  if (companyStore.companies.length > 0 && !selectedCompanyId.value) {
-    const firstCompany = companyStore.companies[0]
-    selectedCompanyId.value = firstCompany.id
-    companyStore.selectCompany(firstCompany)
+  // Initialize companies for the authenticated user
+  if (authStore.user) {
+    await companiesStore.fetchUserCompanies(authStore.user.id)
     
-    // Auto-select first branch if only one exists
-    if (companyStore.currentCompanyBranches.length === 1) {
-      const firstBranch = companyStore.currentCompanyBranches[0]
-      selectedBranchId.value = firstBranch.id
-      companyStore.selectBranch(firstBranch)
+    // Auto-select first company if available and none is selected
+    if (companiesStore.userCompanies.length > 0 && !selectedCompanyId.value) {
+      const firstUserCompany = companiesStore.userCompanies[0]
+      selectedCompanyId.value = firstUserCompany.company.id
+      companiesStore.setCurrentCompany(firstUserCompany.company)
+      
+      // Load branches for the selected company
+      await branchesStore.fetchAll(firstUserCompany.company.id)
+      
+      // Restore saved branch selection if valid for this company
+      const savedBranchId = localStorage.getItem('selectedBranchId')
+      if (savedBranchId && branchesStore.branches.find(b => b.id === savedBranchId)) {
+        selectedBranchId.value = savedBranchId
+      }
     }
   }
 })

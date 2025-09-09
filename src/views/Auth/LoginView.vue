@@ -1,5 +1,9 @@
 <template>
   <form class="space-y-4" @submit.prevent="login">
+    <div v-if="authStore.error" class="p-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md">
+      {{ authStore.error }}
+    </div>
+    
     <div class="space-y-2">
       <label for="email" class="text-sm font-medium leading-none">Email address</label>
       <Input 
@@ -10,6 +14,7 @@
         autocomplete="email" 
         required 
         placeholder="Enter your email" 
+        :disabled="authStore.loading"
       />
     </div>
     <div class="space-y-2">
@@ -22,6 +27,7 @@
         autocomplete="current-password" 
         required 
         placeholder="Enter your password" 
+        :disabled="authStore.loading"
       />
     </div>
 
@@ -31,6 +37,7 @@
           id="remember" 
           name="remember" 
           type="checkbox" 
+          :disabled="authStore.loading"
           class="h-4 w-4 rounded border border-input bg-background text-primary focus:ring-2 focus:ring-ring focus:ring-offset-2" 
         />
         <label for="remember" class="text-sm">Remember me</label>
@@ -40,9 +47,10 @@
       </div>
     </div>
 
-    <Button type="submit" class="w-full">
-      <Lock class="mr-2 h-4 w-4" />
-      Sign in
+    <Button type="submit" class="w-full" :disabled="authStore.loading">
+      <Lock v-if="!authStore.loading" class="mr-2 h-4 w-4" />
+      <div v-else class="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
+      {{ authStore.loading ? 'Signing in...' : 'Sign in' }}
     </Button>
   </form>
 </template>
@@ -61,8 +69,15 @@ const router = useRouter()
 const authStore = useAuthStore()
 
 const login = async () => {
-  await authStore.login(email.value, password.value)
-  if (authStore.isAuthenticated) {
+  console.log('Login form submitted with:', {
+    email: email.value,
+    password: password.value ? '[HIDDEN]' : 'EMPTY',
+    emailLength: email.value?.length || 0,
+    passwordLength: password.value?.length || 0
+  })
+  
+  const success = await authStore.login(email.value, password.value)
+  if (success) {
     router.push('/')
   }
 }

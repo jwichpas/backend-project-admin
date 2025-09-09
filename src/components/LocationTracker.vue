@@ -29,11 +29,19 @@
           >
             <Settings class="h-4 w-4" />
           </Button>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            @click="isMinimized = !isMinimized"
+            class="ml-2"
+          >
+            <component :is="isMinimized ? ChevronDown : ChevronUp" class="h-4 w-4" />
+          </Button>
         </div>
       </div>
     </CardHeader>
 
-    <CardContent>
+    <CardContent v-if="!isMinimized">
       <!-- Información del estado actual -->
       <div class="space-y-4">
         <!-- Estado de permisos -->
@@ -244,7 +252,9 @@ import {
   AlertCircle,
   X,
   RotateCw,
-  Info
+  Info,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-vue-next'
 import Card from '@/components/ui/Card.vue'
 import CardHeader from '@/components/ui/CardHeader.vue'
@@ -294,6 +304,7 @@ const {
 // Estado local del componente
 const showSettings = ref(false)
 const showDeviceInfo = ref(false)
+const isMinimized = ref(false)
 const localTrackingInterval = ref(trackingOptions.value.trackingInterval || 5000)
 const highAccuracyEnabled = ref(trackingOptions.value.enableHighAccuracy ?? true)
 

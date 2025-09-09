@@ -1,5 +1,13 @@
 <template>
   <form class="space-y-4" @submit.prevent="register">
+    <div v-if="authStore.error" class="p-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md">
+      {{ authStore.error }}
+    </div>
+    
+    <div v-if="passwordError" class="p-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md">
+      {{ passwordError }}
+    </div>
+    
     <div class="space-y-2">
       <label for="name" class="text-sm font-medium leading-none">Full name</label>
       <Input 
@@ -10,6 +18,7 @@
         autocomplete="name" 
         required 
         placeholder="Enter your full name" 
+        :disabled="authStore.loading"
       />
     </div>
     <div class="space-y-2">
@@ -22,6 +31,7 @@
         autocomplete="email" 
         required 
         placeholder="Enter your email" 
+        :disabled="authStore.loading"
       />
     </div>
     <div class="space-y-2">
@@ -34,6 +44,7 @@
         autocomplete="new-password" 
         required 
         placeholder="Enter your password" 
+        :disabled="authStore.loading"
       />
     </div>
     <div class="space-y-2">
@@ -46,6 +57,7 @@
         autocomplete="new-password" 
         required 
         placeholder="Confirm your password" 
+        :disabled="authStore.loading"
       />
     </div>
 
@@ -55,6 +67,7 @@
         name="terms" 
         type="checkbox" 
         required
+        :disabled="authStore.loading"
         class="h-4 w-4 rounded border border-input bg-background text-primary focus:ring-2 focus:ring-ring focus:ring-offset-2" 
       />
       <label for="terms" class="text-sm">
@@ -62,9 +75,10 @@
       </label>
     </div>
 
-    <Button type="submit" class="w-full">
-      <UserPlus class="mr-2 h-4 w-4" />
-      Create account
+    <Button type="submit" class="w-full" :disabled="authStore.loading">
+      <UserPlus v-if="!authStore.loading" class="mr-2 h-4 w-4" />
+      <div v-else class="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
+      {{ authStore.loading ? 'Creating account...' : 'Create account' }}
     </Button>
   </form>
 </template>
@@ -81,17 +95,25 @@ const name = ref('')
 const email = ref('')
 const password = ref('')
 const confirmPassword = ref('')
+const passwordError = ref('')
 const router = useRouter()
 const authStore = useAuthStore()
 
 const register = async () => {
+  passwordError.value = ''
+  
   if (password.value !== confirmPassword.value) {
-    alert('Passwords do not match')
+    passwordError.value = 'Passwords do not match'
     return
   }
   
-  await authStore.register(name.value, email.value, password.value)
-  if (authStore.isAuthenticated) {
+  if (password.value.length < 6) {
+    passwordError.value = 'Password must be at least 6 characters long'
+    return
+  }
+  
+  const success = await authStore.register(email.value, password.value, name.value)
+  if (success) {
     router.push('/')
   }
 }

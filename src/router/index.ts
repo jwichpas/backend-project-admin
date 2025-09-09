@@ -79,6 +79,24 @@ const router = createRouter({
       component: () => import('../views/SettingsView.vue'),
       meta: { requiresAuth: true }
     },
+    {
+      path: '/companies',
+      name: 'companies',
+      component: () => import('../views/CompaniesView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/branches',
+      name: 'branches',
+      component: () => import('../views/BranchesView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/sunat',
+      name: 'sunat',
+      component: () => import('../views/SunatView.vue'),
+      meta: { requiresAuth: true }
+    },
     
     // Legacy routes (to be removed)
     {
@@ -98,21 +116,41 @@ const router = createRouter({
 })
 
 // Navigation guards
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
+  
+  // Wait for auth initialization if not completed
+  if (!authStore.isInitialized) {
+    console.log('Waiting for auth initialization...')
+    // Wait a bit for initialization to complete
+    let attempts = 0
+    while (!authStore.isInitialized && attempts < 50) {
+      await new Promise(resolve => setTimeout(resolve, 50))
+      attempts++
+    }
+    
+    if (!authStore.isInitialized) {
+      console.warn('Auth initialization timeout, proceeding anyway')
+    } else {
+      console.log('Auth initialization completed, proceeding with navigation')
+    }
+  }
   
   // Check if route requires authentication
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
+    console.log('Route requires auth but user not authenticated, redirecting to login')
     next('/login')
     return
   }
   
   // Check if route requires guest (unauthenticated)
   if (to.meta.requiresGuest && authStore.isAuthenticated) {
+    console.log('Route requires guest but user is authenticated, redirecting to dashboard')
     next('/')
     return
   }
   
+  console.log('Navigation allowed to:', to.path)
   next()
 })
 

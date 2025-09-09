@@ -28,10 +28,18 @@
               <X class="mr-2 h-4 w-4" />
               Limpiar Todo
             </Button>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              @click="isMinimized = !isMinimized"
+              class="ml-2"
+            >
+              <component :is="isMinimized ? ChevronDown : ChevronUp" class="h-4 w-4" />
+            </Button>
           </div>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent v-if="!isMinimized">
         <!-- Form para crear nueva ruta -->
         <div v-if="showNewRouteForm" class="bg-muted/50 p-4 rounded-lg border-2 border-dashed border-border">
           <h4 class="font-medium mb-3">Crear Nueva Ruta</h4>
@@ -271,7 +279,9 @@ import {
   Bell,
   AlertTriangle,
   Users,
-  Target
+  Target,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-vue-next'
 import routeService, { type Route as RouteType, type Coordinate, type MultiStopRoute, type TrafficAlert } from '@/services/RouteService'
 import webSocketService, { type VehicleUpdate, type RouteUpdate } from '@/services/WebSocketService'
@@ -344,6 +354,7 @@ const showNewRouteForm = ref(false)
 const showMultiStopForm = ref(false)
 const showFleetOptimizer = ref(false)
 const isConnected = ref(false)
+const isMinimized = ref(false)
 const notifications = ref<Notification[]>([])
 const vehicleUpdates = ref<Map<string, VehicleUpdate>>(new Map())
 
