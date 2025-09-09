@@ -1307,3 +1307,68 @@ AS $$
     WHERE p.company_id = p_company_id
       AND p.active = true;
 $$;
+
+-- ============ Inventory =================
+CREATE OR REPLACE FUNCTION get_inventory_items(
+    p_company_id UUID DEFAULT NULL,
+    p_warehouse_id UUID DEFAULT NULL,
+    p_category_id UUID DEFAULT NULL
+)
+RETURNS TABLE (
+    product_id UUID,
+    product_name TEXT,
+    product_sku TEXT,
+    warehouse_id UUID,
+    warehouse_name TEXT,
+    balance_qty NUMERIC(18,6),
+    reserved_qty NUMERIC(18,6),
+    available_qty NUMERIC(18,6),
+    average_cost NUMERIC(18,6),
+    min_stock NUMERIC(18,6),
+    max_stock NUMERIC(18,6)
+)
+LANGUAGE sql
+AS $$
+    WITH reserved AS (
+        SELECT soi.product_id,
+               so.company_id,
+               SUM(soi.quantity) AS reserved_qty
+        FROM sales_orders so
+        JOIN sales_order_items soi ON soi.sales_order_id = so.id
+        WHERE (p_company_id IS NULL OR so.company_id = p_company_id)
+          AND so.status IN ('PENDING','APPROVED') -- pedidos no enviados aún
+        GROUP BY soi.product_id, so.company_id
+    )
+    SELECT 
+        p.id AS product_id,
+        p.name AS product_name,
+        p.sku AS product_sku,
+        w.id AS warehouse_id,
+        w.name AS warehouse_name,
+        ws.balance_qty,
+        COALESCE(r.reserved_qty, 0) AS reserved_qty,
+        ws.balance_qty - COALESCE(r.reserved_qty, 0) AS available_qty,
+        -- costo promedio móvil (último balance en stock_ledger)
+        COALESCE((
+            SELECT sl.balance_unit_cost
+            FROM stock_ledger sl
+            WHERE sl.company_id = p.company_id
+              AND sl.warehouse_id = w.id
+              AND sl.product_id = p.id
+            ORDER BY sl.movement_date DESC, sl.created_at DESC
+            LIMIT 1
+        ), 0) AS average_cost,
+        p.min_stock,
+        p.max_stock
+    FROM warehouse_stock ws
+    JOIN warehouses w ON w.id = ws.warehouse_id
+    JOIN products p ON p.id = ws.product_id
+    LEFT JOIN reserved r 
+           ON r.product_id = p.id 
+          AND r.company_id = p.company_id
+    WHERE (p_company_id IS NULL OR p.company_id = p_company_id)
+      AND (p_warehouse_id IS NULL OR w.id = p_warehouse_id)
+      AND (p_category_id IS NULL OR p.category_id = p_category_id)
+      AND p.active = true
+    ORDER BY w.name, p.name;
+$$;
