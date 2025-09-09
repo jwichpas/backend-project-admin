@@ -1223,7 +1223,9 @@ CREATE TRIGGER trigger_update_cost_report_sales_items
 -- ===================== PRODUCTS =====================
 CREATE OR REPLACE FUNCTION list_products_full(
     p_company_id UUID,
-    p_price_list_id UUID DEFAULT NULL
+    p_price_list_id UUID DEFAULT NULL,
+    p_category_id UUID DEFAULT NULL,
+    p_brand_id UUID DEFAULT NULL
 )
 RETURNS TABLE (
     product_id UUID,
@@ -1231,7 +1233,9 @@ RETURNS TABLE (
     barcode TEXT,
     product_name TEXT,
     description TEXT,
+    brand_id UUID,
     brand_name TEXT,
+    category_id UUID,
     category_name TEXT,
     unit_code TEXT,
     main_image TEXT,
@@ -1239,17 +1243,32 @@ RETURNS TABLE (
     unit_price NUMERIC,
     currency_code VARCHAR(3),
     discount_value NUMERIC,
+    total_stock NUMERIC,
+    available_stock NUMERIC,
+    reserved_stock NUMERIC,
+    active BOOLEAN,
     metadata JSONB
 )
 LANGUAGE sql
 AS $$
+    WITH reserved_stock AS (
+        SELECT soi.product_id,
+               SUM(soi.quantity) AS reserved_qty
+        FROM sales_orders so
+        JOIN sales_order_items soi ON soi.sales_order_id = so.id
+        WHERE so.company_id = p_company_id
+          AND so.status IN ('PENDING','APPROVED')
+        GROUP BY soi.product_id
+    )
     SELECT 
         p.id AS product_id,
         p.sku,
         p.barcode,
         p.name AS product_name,
         p.description,
+        p.brand_id,
         b.name AS brand_name,
+        p.category_id,
         c.name AS category_name,
         p.unit_code,
         -- Imagen principal
@@ -1300,12 +1319,34 @@ AS $$
            AND d.is_active = true
            AND CURRENT_DATE BETWEEN d.valid_from AND COALESCE(d.valid_to, CURRENT_DATE)
          LIMIT 1) AS discount_value,
+        -- Stock total (suma de todos los almacenes)
+        COALESCE((
+            SELECT SUM(ws.balance_qty)
+            FROM warehouse_stock ws
+            JOIN warehouses w ON w.id = ws.warehouse_id
+            WHERE ws.product_id = p.id
+              AND w.company_id = p_company_id
+        ), 0) AS total_stock,
+        -- Stock disponible (total - reservado)
+        COALESCE((
+            SELECT SUM(ws.balance_qty)
+            FROM warehouse_stock ws
+            JOIN warehouses w ON w.id = ws.warehouse_id
+            WHERE ws.product_id = p.id
+              AND w.company_id = p_company_id
+        ), 0) - COALESCE(rs.reserved_qty, 0) AS available_stock,
+        -- Stock reservado
+        COALESCE(rs.reserved_qty, 0) AS reserved_stock,
+        p.active,
         p.metadata
     FROM products p
-    JOIN brands b ON b.id = p.brand_id
-    JOIN categories c ON c.id = p.category_id
+    LEFT JOIN brands b ON b.id = p.brand_id
+    LEFT JOIN categories c ON c.id = p.category_id
+    LEFT JOIN reserved_stock rs ON rs.product_id = p.id
     WHERE p.company_id = p_company_id
-      AND p.active = true;
+      AND (p_category_id IS NULL OR p.category_id = p_category_id)
+      AND (p_brand_id IS NULL OR p.brand_id = p_brand_id)
+    ORDER BY p.name;
 $$;
 
 -- ============ Inventory =================

@@ -62,10 +62,60 @@
             <p v-if="!isCollapsed" class="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Inventario</p>
           </li>
           <li>
-            <router-link to="/products" class="group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors" :class="getNavClass('/products')">
-              <Package class="mr-3 h-5 w-5 transition-colors" :class="getIconClass('/products')" />
-              <span v-if="!isCollapsed">Productos</span>
-            </router-link>
+            <div class="relative">
+              <button 
+                @click="toggleProductsMenu"
+                class="group flex items-center w-full rounded-md px-3 py-2 text-sm font-medium transition-colors" 
+                :class="getNavClass('/products')"
+              >
+                <Package class="mr-3 h-5 w-5 transition-colors" :class="getIconClass('/products')" />
+                <span v-if="!isCollapsed" class="flex-1 text-left">Productos</span>
+                <ChevronDown 
+                  v-if="!isCollapsed" 
+                  class="h-4 w-4 transition-transform" 
+                  :class="{ 'rotate-180': productsMenuOpen }"
+                />
+              </button>
+              
+              <!-- Products Submenu -->
+              <div v-if="productsMenuOpen && !isCollapsed" class="mt-1 space-y-1 pl-6">
+                <router-link 
+                  to="/products" 
+                  class="block rounded-md px-3 py-2 text-sm transition-colors"
+                  :class="getSubmenuClass('/products')"
+                >
+                  Lista de Productos
+                </router-link>
+                <router-link 
+                  to="/products/categories" 
+                  class="block rounded-md px-3 py-2 text-sm transition-colors"
+                  :class="getSubmenuClass('/products/categories')"
+                >
+                  Categorías
+                </router-link>
+                <router-link 
+                  to="/products/brands" 
+                  class="block rounded-md px-3 py-2 text-sm transition-colors"
+                  :class="getSubmenuClass('/products/brands')"
+                >
+                  Marcas
+                </router-link>
+                <router-link 
+                  to="/products/price-lists" 
+                  class="block rounded-md px-3 py-2 text-sm transition-colors"
+                  :class="getSubmenuClass('/products/price-lists')"
+                >
+                  Listas de Precios
+                </router-link>
+                <router-link 
+                  to="/products/locations" 
+                  class="block rounded-md px-3 py-2 text-sm transition-colors"
+                  :class="getSubmenuClass('/products/locations')"
+                >
+                  Ubicaciones
+                </router-link>
+              </div>
+            </div>
           </li>
           <li>
             <router-link to="/inventory" class="group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors" :class="getNavClass('/inventory')">
@@ -231,7 +281,7 @@ import { useAuthStore } from '@/stores/auth'
 import { 
   Menu, LayoutDashboard, Settings, Moon, Sun, User,
   Receipt, Users, ShoppingCart, Truck, Package, Warehouse, BarChart3,
-  Building, MapPin, FileText
+  Building, MapPin, FileText, ChevronDown
 } from 'lucide-vue-next'
 import Select from '@/components/ui/Select.vue'
 
@@ -244,7 +294,9 @@ const authStore = useAuthStore()
 
 const isCollapsed = ref(false)
 const userMenuOpen = ref(false)
+const productsMenuOpen = ref(false)
 const toggleCollapse = () => { isCollapsed.value = !isCollapsed.value }
+const toggleProductsMenu = () => { productsMenuOpen.value = !productsMenuOpen.value }
 
 // Company and Branch selection
 const selectedCompanyId = ref<string | null>(null)
@@ -310,6 +362,10 @@ const getPageTitle = () => {
   const routeNames: Record<string, string> = {
     'dashboard': 'Dashboard',
     'products': 'Productos',
+    'products-categories': 'Categorías',
+    'products-brands': 'Marcas', 
+    'products-price-lists': 'Listas de Precios',
+    'products-locations': 'Ubicaciones',
     'sales': 'Ventas',
     'purchases': 'Compras',
     'inventory': 'Inventario',
@@ -337,18 +393,33 @@ const logout = async () => {
 
 // Navigation helpers
 const getNavClass = (path: string) => {
-  const isActive = route.path === path
+  const isActive = route.path === path || route.path.startsWith(path + '/')
   return isActive 
     ? 'bg-primary text-primary-foreground'
     : 'text-muted-foreground hover:bg-muted hover:text-foreground'
 }
 
 const getIconClass = (path: string) => {
-  const isActive = route.path === path
+  const isActive = route.path === path || route.path.startsWith(path + '/')
   return isActive 
     ? 'text-primary-foreground'
     : 'text-muted-foreground group-hover:text-foreground'
 }
+
+const getSubmenuClass = (path: string) => {
+  const isActive = route.path === path
+  return isActive 
+    ? 'bg-muted text-foreground font-medium'
+    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+}
+
+// Watch for route changes to auto-open menus
+watch(route, (newRoute) => {
+  // Auto-open products menu when visiting products routes
+  if (newRoute.path.startsWith('/products')) {
+    productsMenuOpen.value = true
+  }
+}, { immediate: true })
 
 onMounted(async () => {
   // Initialize companies for the authenticated user

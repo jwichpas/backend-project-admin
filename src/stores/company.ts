@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { supabase } from '@/lib/supabase'
 
 export interface Company {
   id: string
@@ -44,17 +45,16 @@ export const useCompanyStore = defineStore('company', {
     async fetchCompanies() {
       this.loading = true
       try {
-        // Mock data based on seed.sql
-        this.companies = [{
-          id: '1',
-          ruc: '20600055519',
-          legal_name: 'MI EMPRESA SAC',
-          trade_name: 'MI EMPRESA',
-          currency_code: 'PEN',
-          valuation_method: 'PROMEDIO_MOVIL',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }]
+        const { data, error } = await supabase
+          .from('companies')
+          .select('*')
+          .order('legal_name')
+
+        if (error) throw error
+        this.companies = data || []
+        console.log('Companies loaded:', this.companies)
+      } catch (error: any) {
+        console.error('Error fetching companies:', error)
       } finally {
         this.loading = false
       }
@@ -63,36 +63,17 @@ export const useCompanyStore = defineStore('company', {
     async fetchBranches(companyId: string) {
       this.loading = true
       try {
-        // Mock data based on seed.sql
-        this.branches = [
-          {
-            id: '1',
-            company_id: companyId,
-            code: '001',
-            name: 'Casa Matriz',
-            address: 'Av. Arequipa 123',
-            ubigeo_code: '150101',
-            is_active: true
-          },
-          {
-            id: '2', 
-            company_id: companyId,
-            code: '002',
-            name: 'Sucursal Ate',
-            address: 'Av. Nicolás Ayllón 2345',
-            ubigeo_code: '150103',
-            is_active: true
-          },
-          {
-            id: '3',
-            company_id: companyId,
-            code: '003', 
-            name: 'Sucursal Callao',
-            address: 'Av. Saenz Peña 345',
-            ubigeo_code: '070101',
-            is_active: false
-          }
-        ]
+        const { data, error } = await supabase
+          .from('branches')
+          .select('*')
+          .eq('company_id', companyId)
+          .order('code')
+
+        if (error) throw error
+        this.branches = data || []
+        console.log('Branches loaded:', this.branches)
+      } catch (error: any) {
+        console.error('Error fetching branches:', error)
       } finally {
         this.loading = false
       }

@@ -43,9 +43,13 @@
               class="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <option value="">Todas las categorías</option>
-              <option value="LACTEOS">Lácteos</option>
-              <option value="ABARROTES">Abarrotes</option>
-              <option value="BEBIDAS">Bebidas</option>
+              <option 
+                v-for="category in productsStore.activeCategories" 
+                :key="category.id" 
+                :value="category.id"
+              >
+                {{ category.name }}
+              </option>
             </select>
           </div>
           <div>
@@ -70,7 +74,7 @@
           <div class="flex items-center justify-between">
             <div>
               <p class="text-sm text-muted-foreground">Valor Total</p>
-              <p class="text-2xl font-bold">S/ 125,840</p>
+              <p class="text-2xl font-bold">{{ formatCurrency(totalValue) }}</p>
             </div>
             <TrendingUp class="h-8 w-8 text-green-500" />
           </div>
@@ -81,7 +85,7 @@
           <div class="flex items-center justify-between">
             <div>
               <p class="text-sm text-muted-foreground">Productos</p>
-              <p class="text-2xl font-bold">1,247</p>
+              <p class="text-2xl font-bold">{{ totalProducts }}</p>
             </div>
             <Package class="h-8 w-8 text-blue-500" />
           </div>
@@ -92,7 +96,7 @@
           <div class="flex items-center justify-between">
             <div>
               <p class="text-sm text-muted-foreground">Stock Bajo</p>
-              <p class="text-2xl font-bold text-amber-600">23</p>
+              <p class="text-2xl font-bold text-amber-600">{{ lowStockCount }}</p>
             </div>
             <AlertTriangle class="h-8 w-8 text-amber-500" />
           </div>
@@ -103,7 +107,7 @@
           <div class="flex items-center justify-between">
             <div>
               <p class="text-sm text-muted-foreground">Sin Stock</p>
-              <p class="text-2xl font-bold text-red-600">8</p>
+              <p class="text-2xl font-bold text-red-600">{{ noStockCount }}</p>
             </div>
             <AlertCircle class="h-8 w-8 text-red-500" />
           </div>
@@ -131,7 +135,20 @@
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableRow v-for="item in inventoryItems" :key="`${item.product_id}-${item.warehouse_id}`">
+            <TableRow v-if="productsStore.loading">
+              <TableCell colspan="8" class="text-center py-8">
+                <div class="flex items-center justify-center">
+                  <Loader2 class="h-6 w-6 animate-spin mr-2" />
+                  Cargando inventario...
+                </div>
+              </TableCell>
+            </TableRow>
+            <TableRow v-else-if="inventoryItems.length === 0">
+              <TableCell colspan="8" class="text-center py-8 text-muted-foreground">
+                No se encontraron elementos en el inventario
+              </TableCell>
+            </TableRow>
+            <TableRow v-else v-for="item in inventoryItems" :key="`${item.product_id}-${item.warehouse_id}`">
               <TableCell>
                 <div class="flex items-center gap-3">
                   <div class="h-10 w-10 rounded-md bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
@@ -199,7 +216,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useCompanyStore } from '@/stores/company'
+import { useProductsStore } from '@/stores/products'
 import {
   Download,
   Plus,
@@ -209,7 +228,8 @@ import {
   AlertCircle,
   History,
   Edit,
-  MoreVertical
+  MoreVertical,
+  Loader2
 } from 'lucide-vue-next'
 
 // UI Components
@@ -226,60 +246,93 @@ import TableBody from '@/components/ui/TableBody.vue'
 import TableCell from '@/components/ui/TableCell.vue'
 import Badge from '@/components/ui/Badge.vue'
 
-interface InventoryItem {
-  product_id: string
-  product_name: string
-  product_sku: string
-  warehouse_id: string
-  warehouse_name: string
-  balance_qty: number
-  reserved_qty: number
-  available_qty: number
-  average_cost: number
-}
-
-interface Warehouse {
-  id: string
-  name: string
-}
+const companyStore = useCompanyStore()
+const productsStore = useProductsStore()
 
 // Filters
 const selectedWarehouse = ref('')
 const selectedCategory = ref('')
 const selectedStatus = ref('')
 
-// Mock data
-const warehouses = ref<Warehouse[]>([
-  { id: '1', name: 'Almacén Principal' },
-  { id: '2', name: 'Almacén Ate' }
-])
+// Computed
+const filteredInventoryItems = computed(() => {
+  let items = productsStore.inventoryItems
 
-const inventoryItems = ref<InventoryItem[]>([
-  {
-    product_id: '1',
-    product_name: 'Leche Gloria Entera 1L',
-    product_sku: 'LECHE-GLORIA-1L',
-    warehouse_id: '1',
-    warehouse_name: 'Almacén Principal',
-    balance_qty: 100,
-    reserved_qty: 0,
-    available_qty: 100,
-    average_cost: 12.50
-  },
-  {
-    product_id: '2',
-    product_name: 'Aceite Primor 1L',
-    product_sku: 'ACEITE-PRIMOR-1L',
-    warehouse_id: '1',
-    warehouse_name: 'Almacén Principal',
-    balance_qty: 15,
-    reserved_qty: 5,
-    available_qty: 10,
-    average_cost: 8.50
+  if (selectedWarehouse.value) {
+    items = items.filter(item => item.warehouse_id === selectedWarehouse.value)
   }
-])
+
+  if (selectedCategory.value) {
+    // Note: Would need to add category filtering if available in inventory data
+    // For now, we'll skip this filter
+  }
+
+  if (selectedStatus.value === 'low') {
+    items = items.filter(item => 
+      item.balance_qty > 0 && item.balance_qty <= (item.min_stock || 20)
+    )
+  } else if (selectedStatus.value === 'out') {
+    items = items.filter(item => item.balance_qty <= 0)
+  }
+
+  return items
+})
+
+const totalValue = computed(() => {
+  return filteredInventoryItems.value.reduce((total, item) => 
+    total + (item.balance_qty * item.average_cost), 0
+  )
+})
+
+const totalProducts = computed(() => {
+  return filteredInventoryItems.value.filter(item => item.balance_qty > 0).length
+})
+
+const lowStockCount = computed(() => {
+  return filteredInventoryItems.value.filter(item => 
+    item.balance_qty > 0 && item.balance_qty <= (item.min_stock || 20)
+  ).length
+})
+
+const noStockCount = computed(() => {
+  return filteredInventoryItems.value.filter(item => item.balance_qty <= 0).length
+})
+
+const inventoryItems = computed(() => filteredInventoryItems.value)
+const warehouses = computed(() => productsStore.warehouses)
 
 const formatCurrency = (amount: number) => {
   return `S/ ${amount.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
+
+onMounted(async () => {
+  try {
+    // Ensure companies are loaded
+    if (companyStore.companies.length === 0) {
+      await companyStore.fetchCompanies()
+    }
+
+    // Auto-select first company if none selected
+    if (!companyStore.selectedCompany && companyStore.companies.length > 0) {
+      companyStore.selectCompany(companyStore.companies[0])
+    }
+
+    // Load inventory data if company is available
+    if (companyStore.selectedCompany) {
+      console.log('Loading inventory for company:', companyStore.selectedCompany.legal_name)
+      
+      await Promise.all([
+        productsStore.fetchInventoryItems(companyStore.selectedCompany.id),
+        productsStore.fetchWarehouses(companyStore.selectedCompany.id),
+        productsStore.fetchCategories(companyStore.selectedCompany.id)
+      ])
+      
+      console.log('Inventory items loaded:', productsStore.inventoryItems.length)
+    } else {
+      console.warn('No company available to load inventory')
+    }
+  } catch (error) {
+    console.error('Error loading inventory data:', error)
+  }
+})
 </script>

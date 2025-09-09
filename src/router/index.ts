@@ -25,10 +25,35 @@ const router = createRouter({
       component: () => import('../views/DashboardView.vue'),
       meta: { requiresAuth: true }
     },
+    // Products module with nested routes
     {
       path: '/products',
       name: 'products',
       component: () => import('../views/ProductsView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/products/categories',
+      name: 'products-categories',
+      component: () => import('../views/Products/CategoriesView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/products/brands',
+      name: 'products-brands',
+      component: () => import('../views/Products/BrandsView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/products/price-lists',
+      name: 'products-price-lists',
+      component: () => import('../views/Products/PriceListsView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/products/locations',
+      name: 'products-locations',
+      component: () => import('../views/Products/LocationsView.vue'),
       meta: { requiresAuth: true }
     },
     {
