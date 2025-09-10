@@ -574,6 +574,55 @@ export const usePurchasesStore = defineStore('purchases', {
       }
     },
 
+    async createReception(receptionData: Omit<Reception, 'id' | 'created_at' | 'updated_at'>) {
+      this.loading = true
+      this.error = null
+      try {
+        // Extract items from receptionData
+        const { items, ...receptionCoreData } = receptionData as any
+        
+        // Create the reception first
+        const { data: reception, error: receptionError } = await supabase
+          .from('receptions')
+          .insert(receptionCoreData)
+          .select()
+          .single()
+
+        if (receptionError) throw receptionError
+        
+        // Create reception items if they exist
+        if (items && items.length > 0 && reception) {
+          const receptionItems = items.map((item: any) => ({
+            reception_id: reception.id,
+            product_id: item.product_id,
+            quantity_received: item.quantity_received,
+            unit_cost: item.unit_cost,
+            batch_number: item.batch_number || null,
+            serial_number: item.serial_number || null,
+            notes: item.notes || null
+          }))
+
+          const { error: itemsError } = await supabase
+            .from('reception_items')
+            .insert(receptionItems)
+
+          if (itemsError) throw itemsError
+        }
+        
+        if (reception) {
+          this.receptions.unshift(reception)
+        }
+        
+        return reception
+      } catch (error: any) {
+        this.error = error.message
+        console.error('Error creating reception:', error)
+        throw error
+      } finally {
+        this.loading = false
+      }
+    },
+
     // ========================================================================
     // ADDITIONAL COSTS
     // ========================================================================
