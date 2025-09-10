@@ -23,7 +23,7 @@
     <!-- Filters -->
     <Card>
       <CardContent class="p-6">
-        <div class="grid gap-4 md:grid-cols-4">
+        <div class="grid gap-4 md:grid-cols-5">
           <div>
             <label class="text-sm font-medium">Buscar</label>
             <Input 
@@ -61,6 +61,22 @@
                 :value="brand.id"
               >
                 {{ brand.name }}
+              </option>
+            </select>
+          </div>
+          <div>
+            <label class="text-sm font-medium">Lista de Precios</label>
+            <select 
+              v-model="selectedPriceList"
+              class="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="">Sin lista de precios</option>
+              <option 
+                v-for="priceList in productsStore.priceLists" 
+                :key="priceList.id" 
+                :value="priceList.id"
+              >
+                {{ priceList.name }} ({{ priceList.currency_code }})
               </option>
             </select>
           </div>
@@ -832,7 +848,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useCompanyStore } from '@/stores/company'
 import { useProductsStore, type ProductFull } from '@/stores/products'
 import {
@@ -883,6 +899,7 @@ const editingProduct = ref(false)
 const searchTerm = ref('')
 const selectedCategory = ref('')
 const selectedBrand = ref('')
+const selectedPriceList = ref('')
 const selectedStatus = ref('')
 
 // Product form
@@ -1037,6 +1054,18 @@ const formatCurrency = (amount: number, currencyCode: string) => {
   return formatter.format(amount)
 }
 
+// Load products with current filters
+const loadProducts = async () => {
+  if (!companyStore.selectedCompany) return
+  
+  await productsStore.fetchProductsFull(
+    companyStore.selectedCompany.id,
+    selectedPriceList.value || null,
+    selectedCategory.value || null,
+    selectedBrand.value || null
+  )
+}
+
 const submitProductForm = async () => {
   try {
     if (!companyStore.selectedCompany) return
@@ -1057,7 +1086,7 @@ const submitProductForm = async () => {
     cancelProductForm()
     
     // Refresh products list
-    await productsStore.fetchProductsFull(companyStore.selectedCompany.id)
+    await loadProducts()
   } catch (error) {
     console.error('Error saving product:', error)
   }
@@ -1193,13 +1222,20 @@ onMounted(async () => {
       console.log('Loading products for company:', companyStore.selectedCompany.legal_name)
       
       await Promise.all([
-        productsStore.fetchProductsFull(companyStore.selectedCompany.id),
         productsStore.fetchBrands(companyStore.selectedCompany.id),
         productsStore.fetchCategories(companyStore.selectedCompany.id),
         productsStore.fetchWarehouses(companyStore.selectedCompany.id),
         productsStore.fetchPriceLists(companyStore.selectedCompany.id),
         productsStore.fetchInventoryItems(companyStore.selectedCompany.id)
       ])
+      
+      // Set default price list (first one found) and load products
+      if (productsStore.priceLists.length > 0 && !selectedPriceList.value) {
+        selectedPriceList.value = productsStore.priceLists[0].id
+      }
+      
+      // Load products with default filters
+      await loadProducts()
       
       console.log('Products loaded:', productsStore.productsFull.length)
       console.log('Brands loaded:', productsStore.brands.length)
@@ -1211,4 +1247,9 @@ onMounted(async () => {
     console.error('Error loading products data:', error)
   }
 })
+
+// Watch for filter changes to reload products
+watch([selectedCategory, selectedBrand, selectedPriceList], async () => {
+  await loadProducts()
+}, { deep: true })
 </script>

@@ -12,7 +12,7 @@ ON CONFLICT (code) DO NOTHING;
 INSERT INTO sunat.cat_02_monedas (code, descripcion) VALUES
 ('PEN', 'NUEVOS SOLES'),
 ('USD', 'DÓLAR AMERICANO'),
-('EUR', 'EURO')
+('CLP', 'PESO CHILENO')
 ON CONFLICT (code) DO NOTHING;
 
 -- 3. Unidades de Medida (cat_03_unidades_medida)
@@ -127,7 +127,7 @@ INSERT INTO public.companies (
     '20600055519',
     'MI EMPRESA SAC',
     'MI EMPRESA',    
-    'PEN',
+    'CLP',
     'PROMEDIO_MOVIL'
 );
 
@@ -146,6 +146,40 @@ INSERT INTO sunat.tab_05_tipo_existencia (code, descripcion) VALUES
 ('03', 'MATERIAS PRIMAS')
 ON CONFLICT (code) DO NOTHING;
 
+-- 🔹 USD ↔ PEN (ejemplo: 1 USD = 3.85 PEN)
+INSERT INTO exchange_rates(from_currency_code, to_currency_code, rate, rate_date)
+VALUES 
+('USD','PEN', 3.850000, '2025-09-07'),
+('PEN','USD', 1/3.850000, '2025-09-07');
+
+-- 🔹 USD ↔ CLP (ejemplo: 1 USD = 900 CLP)
+INSERT INTO exchange_rates(from_currency_code, to_currency_code, rate, rate_date)
+VALUES 
+('USD','CLP', 900.000000, '2025-09-07'),
+('CLP','USD', 1/900.000000, '2025-09-07');
+
+-- 🔹 PEN ↔ CLP (ejemplo: 1 PEN = 234 CLP)
+INSERT INTO exchange_rates(from_currency_code, to_currency_code, rate, rate_date)
+VALUES 
+('PEN','CLP', 234.000000, '2025-09-07'),
+('CLP','PEN', 1/234.000000, '2025-09-07');
+
+INSERT INTO exchange_rates(from_currency_code, to_currency_code, rate, rate_date)
+VALUES 
+('USD','PEN', 3.850000, '2025-09-09'),
+('PEN','USD', 1/3.850000, '2025-09-09');
+
+-- 🔹 USD ↔ CLP (ejemplo: 1 USD = 900 CLP)
+INSERT INTO exchange_rates(from_currency_code, to_currency_code, rate, rate_date)
+VALUES 
+('USD','CLP', 900.000000, '2025-09-09'),
+('CLP','USD', 1/900.000000, '2025-09-09');
+
+-- 🔹 PEN ↔ CLP (ejemplo: 1 PEN = 234 CLP)
+INSERT INTO exchange_rates(from_currency_code, to_currency_code, rate, rate_date)
+VALUES 
+('PEN','CLP', 234.000000, '2025-09-09'),
+('CLP','PEN', 1/234.000000, '2025-09-09');
 
 -- 1. Sucursales (Lima, Ate, Callao)
 INSERT INTO public.branches (company_id, code, name, address, ubigeo_code) 

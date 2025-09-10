@@ -1,0 +1,121 @@
+-- ============================================================================
+-- POLÍTICAS RLS BÁSICAS Y HABILITACIÓN DE TIEMPO REAL
+-- ============================================================================
+
+-- 1. Habilitar RLS en todas las tablas principales
+ALTER TABLE public.roles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.companies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_companies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.branches ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.warehouses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.warehouse_zones ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.parties ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.party_locations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.party_contacts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.brands ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.product_images ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.product_codes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.product_attributes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.product_attribute_values ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.product_purchase_prices ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.product_price_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.product_location ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.product_batches ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.product_serials ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.price_lists ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.price_list_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.discounts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.discount_products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.discount_categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.vehicles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.vehicle_realtime_status ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.vehicle_position_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.drivers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.vehicle_drivers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.purchase_orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.purchase_order_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.purchase_docs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.purchase_doc_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.receptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.reception_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.sales_orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.sales_order_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.sales_docs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.sales_doc_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.shipments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.shipment_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.document_series ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.document_counters ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.stock_ledger ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.warehouse_stock ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.stock_transfers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.stock_transfer_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.inventory_adjustments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.inventory_adjustment_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.physical_inventory_counts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.physical_inventory_count_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.exchange_rates ENABLE ROW LEVEL SECURITY;
+ALTER TABLE audit.changes_log ENABLE ROW LEVEL SECURITY;
+
+-- 2. Política básica para todas las tablas: Solo usuarios autenticados pueden acceder
+CREATE POLICY "Solo usuarios autenticados pueden ver datos"
+ON ALL TABLES IN SCHEMA public
+FOR SELECT USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Solo usuarios autenticados pueden insertar datos"
+ON ALL TABLES IN SCHEMA public
+FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+
+CREATE POLICY "Solo usuarios autenticados pueden actualizar datos"
+ON ALL TABLES IN SCHEMA public
+FOR UPDATE USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Solo usuarios autenticados pueden eliminar datos"
+ON ALL TABLES IN SCHEMA public
+FOR DELETE USING (auth.role() = 'authenticated');
+
+-- 3. Política específica para user_companies: Usuarios solo ven sus propias relaciones
+CREATE POLICY "Usuarios solo ven sus propias relaciones con empresas"
+ON public.user_companies
+FOR ALL USING (auth.uid() = user_id);
+
+-- 4. Habilitar tiempo real para tablas críticas
+ALTER PUBLICATION supabase_realtime ADD TABLE public.products;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.sales_docs;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.purchase_docs;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.shipments;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.receptions;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.warehouse_stock;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.vehicles;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.vehicle_realtime_status;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.stock_ledger;
+
+-- 5. Política específica para tablas con company_id: Usuarios solo ven datos de sus empresas
+DO $$ 
+DECLARE
+    t record;
+BEGIN
+    FOR t IN 
+        SELECT table_name 
+        FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name IN (
+            'companies', 'branches', 'warehouses', 'parties', 
+            'products', 'sales_docs', 'purchase_docs'
+        )
+    LOOP
+        EXECUTE format(
+            'CREATE POLICY "Usuarios solo ven datos de sus empresas en %s"
+            ON public.%I FOR SELECT USING (
+                company_id IN (
+                    SELECT company_id 
+                    FROM public.user_companies 
+                    WHERE user_id = auth.uid()
+                )
+            )',
+            t.table_name, t.table_name
+        );
+    END LOOP;
+END $$;

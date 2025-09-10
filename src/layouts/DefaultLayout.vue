@@ -63,52 +63,52 @@
           </li>
           <li>
             <div class="relative">
-              <button 
+              <button
                 @click="toggleProductsMenu"
-                class="group flex items-center w-full rounded-md px-3 py-2 text-sm font-medium transition-colors" 
+                class="group flex items-center w-full rounded-md px-3 py-2 text-sm font-medium transition-colors"
                 :class="getNavClass('/products')"
               >
                 <Package class="mr-3 h-5 w-5 transition-colors" :class="getIconClass('/products')" />
                 <span v-if="!isCollapsed" class="flex-1 text-left">Productos</span>
-                <ChevronDown 
-                  v-if="!isCollapsed" 
-                  class="h-4 w-4 transition-transform" 
+                <ChevronDown
+                  v-if="!isCollapsed"
+                  class="h-4 w-4 transition-transform"
                   :class="{ 'rotate-180': productsMenuOpen }"
                 />
               </button>
-              
+
               <!-- Products Submenu -->
               <div v-if="productsMenuOpen && !isCollapsed" class="mt-1 space-y-1 pl-6">
-                <router-link 
-                  to="/products" 
+                <router-link
+                  to="/products"
                   class="block rounded-md px-3 py-2 text-sm transition-colors"
                   :class="getSubmenuClass('/products')"
                 >
                   Lista de Productos
                 </router-link>
-                <router-link 
-                  to="/products/categories" 
+                <router-link
+                  to="/products/categories"
                   class="block rounded-md px-3 py-2 text-sm transition-colors"
                   :class="getSubmenuClass('/products/categories')"
                 >
                   Categorías
                 </router-link>
-                <router-link 
-                  to="/products/brands" 
+                <router-link
+                  to="/products/brands"
                   class="block rounded-md px-3 py-2 text-sm transition-colors"
                   :class="getSubmenuClass('/products/brands')"
                 >
                   Marcas
                 </router-link>
-                <router-link 
-                  to="/products/price-lists" 
+                <router-link
+                  to="/products/price-lists"
                   class="block rounded-md px-3 py-2 text-sm transition-colors"
                   :class="getSubmenuClass('/products/price-lists')"
                 >
                   Listas de Precios
                 </router-link>
-                <router-link 
-                  to="/products/locations" 
+                <router-link
+                  to="/products/locations"
                   class="block rounded-md px-3 py-2 text-sm transition-colors"
                   :class="getSubmenuClass('/products/locations')"
                 >
@@ -188,6 +188,17 @@
           <h1 class="text-xl font-semibold text-foreground capitalize">{{ getPageTitle() }}</h1>
         </div>
         <div class="flex items-center space-x-3">
+          <!-- Exchange Rate Display -->
+          <div v-if="companiesStore.currentCompany && exchangeRates.length > 0" class="flex items-center gap-3 px-3 py-1 bg-muted/50 rounded-md">
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-medium text-muted-foreground">{{ companiesStore.currentCompany.currency_code }}:</span>
+              <div class="flex gap-2">
+                <span v-for="rate in exchangeRates" :key="rate.id" class="text-xs font-mono">
+                  {{ rate.to_currency_code }}: {{ formatExchangeRate(rate.rate) }}
+                </span>
+              </div>
+            </div>
+          </div>
           <!-- Company Selector -->
           <div v-if="companiesStore.userCompanies.length > 0" class="min-w-[200px]">
             <div class="flex items-center gap-2 mb-1">
@@ -209,7 +220,7 @@
               </option>
             </select>
           </div>
-          
+
           <!-- Branch Selector -->
           <div v-if="availableBranches.length > 0" class="min-w-[160px]">
             <div class="flex items-center gap-2 mb-1">
@@ -232,24 +243,79 @@
             </select>
           </div>
 
+
+
+          <!-- Notifications -->
+          <div class="relative notifications-dropdown">
+            <button
+              @click="toggleNotifications"
+              class="relative rounded-md p-2 text-muted-foreground hover:bg-muted"
+            >
+              <Bell class="h-5 w-5" />
+              <span v-if="unreadNotifications > 0" class="absolute -top-1 -right-1 h-4 w-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
+                {{ unreadNotifications > 9 ? '9+' : unreadNotifications }}
+              </span>
+            </button>
+
+            <!-- Notifications Dropdown -->
+            <div v-if="notificationsOpen" class="absolute right-0 top-full mt-2 w-80 bg-background border border-border rounded-md shadow-lg z-50">
+              <div class="p-3 border-b">
+                <div class="flex items-center justify-between">
+                  <h3 class="font-medium">Notificaciones</h3>
+                  <button
+                    @click="markAllAsRead"
+                    class="text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    Marcar todas como leídas
+                  </button>
+                </div>
+              </div>
+              <div class="max-h-96 overflow-y-auto">
+                <div v-if="notifications.length === 0" class="p-4 text-center text-muted-foreground">
+                  No hay notificaciones
+                </div>
+                <div v-else>
+                  <div
+                    v-for="notification in notifications"
+                    :key="notification.id"
+                    class="p-3 border-b last:border-b-0 hover:bg-muted/50 cursor-pointer"
+                    :class="{ 'bg-blue-50 dark:bg-blue-950/20': !notification.read }"
+                    @click="markAsRead(notification.id)"
+                  >
+                    <div class="flex items-start gap-3">
+                      <div class="flex-shrink-0 mt-1">
+                        <div class="h-2 w-2 bg-blue-500 rounded-full" v-if="!notification.read"></div>
+                      </div>
+                      <div class="flex-1">
+                        <p class="text-sm font-medium">{{ notification.title }}</p>
+                        <p class="text-xs text-muted-foreground mt-1">{{ notification.message }}</p>
+                        <p class="text-xs text-muted-foreground mt-1">{{ formatDate(notification.created_at) }}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Dark Mode Toggle -->
           <button @click="toggleDarkMode" class="rounded-md p-2 text-muted-foreground hover:bg-muted">
             <Moon v-if="!darkMode" class="h-5 w-5" />
             <Sun v-else class="h-5 w-5" />
           </button>
-          
+
           <!-- User Profile -->
           <div class="relative">
-            <button 
-              @click="userMenuOpen = !userMenuOpen" 
+            <button
+              @click="userMenuOpen = !userMenuOpen"
               class="flex items-center rounded-full p-1 text-sm hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
             >
               <div class="h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
                 <User class="h-4 w-4" />
               </div>
             </button>
-            <div 
-              v-if="userMenuOpen" 
+            <div
+              v-if="userMenuOpen"
               class="absolute right-0 z-10 mt-2 w-48 origin-top-right rounded-md bg-popover border shadow-lg"
             >
               <div class="py-1">
@@ -278,12 +344,29 @@ import { useCompaniesStore } from '@/stores/companies'
 import { useBranchesStore } from '@/stores/branches'
 import { useThemeStore } from '@/stores/theme'
 import { useAuthStore } from '@/stores/auth'
-import { 
+import {
   Menu, LayoutDashboard, Settings, Moon, Sun, User,
   Receipt, Users, ShoppingCart, Truck, Package, Warehouse, BarChart3,
-  Building, MapPin, FileText, ChevronDown
+  Building, MapPin, FileText, ChevronDown, Bell
 } from 'lucide-vue-next'
 import Select from '@/components/ui/Select.vue'
+import { supabase } from '@/lib/supabase'
+
+interface ExchangeRate {
+  id: number
+  rate_date: string
+  from_currency_code: string
+  to_currency_code: string
+  rate: number
+}
+
+interface Notification {
+  id: number
+  title: string
+  message: string
+  read: boolean
+  created_at: string
+}
 
 const route = useRoute()
 const router = useRouter()
@@ -295,8 +378,13 @@ const authStore = useAuthStore()
 const isCollapsed = ref(false)
 const userMenuOpen = ref(false)
 const productsMenuOpen = ref(false)
+const notificationsOpen = ref(false)
+const exchangeRates = ref<ExchangeRate[]>([])
+const notifications = ref<Notification[]>([])
+
 const toggleCollapse = () => { isCollapsed.value = !isCollapsed.value }
 const toggleProductsMenu = () => { productsMenuOpen.value = !productsMenuOpen.value }
+const toggleNotifications = () => { notificationsOpen.value = !notificationsOpen.value }
 
 // Company and Branch selection
 const selectedCompanyId = ref<string | null>(null)
@@ -319,6 +407,10 @@ const selectedBranchName = computed(() => {
   return branch ? `${branch.code} - ${branch.name}` : ''
 })
 
+const unreadNotifications = computed(() => {
+  return notifications.value.filter(n => !n.read).length
+})
+
 // Handlers for selector changes
 const onCompanyChange = async () => {
   if (selectedCompanyId.value) {
@@ -327,10 +419,10 @@ const onCompanyChange = async () => {
     if (userCompany) {
       companiesStore.setCurrentCompany(userCompany.company)
     }
-    
+
     // Load branches for the selected company
     await branchesStore.fetchAll(selectedCompanyId.value)
-    
+
     // Check if current selected branch belongs to this company
     const savedBranchId = localStorage.getItem('selectedBranchId')
     if (savedBranchId && branchesStore.branches.find(b => b.id === savedBranchId)) {
@@ -363,7 +455,7 @@ const getPageTitle = () => {
     'dashboard': 'Dashboard',
     'products': 'Productos',
     'products-categories': 'Categorías',
-    'products-brands': 'Marcas', 
+    'products-brands': 'Marcas',
     'products-price-lists': 'Listas de Precios',
     'products-locations': 'Ubicaciones',
     'sales': 'Ventas',
@@ -394,23 +486,104 @@ const logout = async () => {
 // Navigation helpers
 const getNavClass = (path: string) => {
   const isActive = route.path === path || route.path.startsWith(path + '/')
-  return isActive 
+  return isActive
     ? 'bg-primary text-primary-foreground'
     : 'text-muted-foreground hover:bg-muted hover:text-foreground'
 }
 
 const getIconClass = (path: string) => {
   const isActive = route.path === path || route.path.startsWith(path + '/')
-  return isActive 
+  return isActive
     ? 'text-primary-foreground'
     : 'text-muted-foreground group-hover:text-foreground'
 }
 
 const getSubmenuClass = (path: string) => {
   const isActive = route.path === path
-  return isActive 
+  return isActive
     ? 'bg-muted text-foreground font-medium'
     : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+}
+
+// Exchange rate and notifications functions
+const fetchExchangeRates = async (company?: any) => {
+  const selectedCompany = company || companiesStore.currentCompany
+  if (!selectedCompany || !selectedCompany.currency_code) return
+
+  try {
+    const { data, error } = await supabase
+      .from('exchange_rates')
+      .select('*')
+      .eq('from_currency_code', selectedCompany.currency_code)
+      .in('to_currency_code', ['USD', 'PEN'])
+      .order('rate_date', { ascending: false })
+      .limit(2)
+
+    if (error) throw error
+    exchangeRates.value = data || []
+  } catch (error) {
+    console.error('Error fetching exchange rates:', error)
+  }
+}
+
+const formatExchangeRate = (rate: number): string => {
+  return rate.toFixed(4)
+}
+
+const formatDate = (dateString: string): string => {
+  return new Date(dateString).toLocaleDateString('es-PE', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+const markAsRead = (notificationId: number) => {
+  const notification = notifications.value.find(n => n.id === notificationId)
+  if (notification) {
+    notification.read = true
+  }
+}
+
+const markAllAsRead = () => {
+  notifications.value.forEach(notification => {
+    notification.read = true
+  })
+}
+
+const loadMockNotifications = () => {
+  notifications.value = [
+    {
+      id: 1,
+      title: 'Stock bajo detectado',
+      message: 'El producto "Leche Gloria 1L" tiene menos de 10 unidades en almacén principal.',
+      read: false,
+      created_at: new Date(Date.now() - 30 * 60 * 1000).toISOString() // 30 min ago
+    },
+    {
+      id: 2,
+      title: 'Documento de venta procesado',
+      message: 'Factura F001-00123 fue procesada correctamente y enviada a SUNAT.',
+      read: false,
+      created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString() // 2 hours ago
+    },
+    {
+      id: 3,
+      title: 'Tipo de cambio actualizado',
+      message: 'Se han actualizado los tipos de cambio del día. USD: 3.7250',
+      read: true,
+      created_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() // 1 day ago
+    },
+    {
+      id: 4,
+      title: 'Respaldo completado',
+      message: 'El respaldo automático de la base de datos se completó exitosamente.',
+      read: true,
+      created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString() // 2 days ago
+    }
+  ]
 }
 
 // Watch for route changes to auto-open menus
@@ -421,20 +594,30 @@ watch(route, (newRoute) => {
   }
 }, { immediate: true })
 
+// Watch for company changes to load exchange rates
+watch(() => companiesStore.currentCompany, async (newCompany) => {
+  if (newCompany) {
+    await fetchExchangeRates()
+  }
+}, { immediate: true })
+
 onMounted(async () => {
   // Initialize companies for the authenticated user
   if (authStore.user) {
     await companiesStore.fetchUserCompanies(authStore.user.id)
-    
+
     // Auto-select first company if available and none is selected
     if (companiesStore.userCompanies.length > 0 && !selectedCompanyId.value) {
       const firstUserCompany = companiesStore.userCompanies[0]
       selectedCompanyId.value = firstUserCompany.company.id
       companiesStore.setCurrentCompany(firstUserCompany.company)
-      
+
       // Load branches for the selected company
       await branchesStore.fetchAll(firstUserCompany.company.id)
-      
+
+      // Load exchange rates for the selected company
+      await fetchExchangeRates(firstUserCompany.company)
+
       // Restore saved branch selection if valid for this company
       const savedBranchId = localStorage.getItem('selectedBranchId')
       if (savedBranchId && branchesStore.branches.find(b => b.id === savedBranchId)) {
@@ -442,5 +625,16 @@ onMounted(async () => {
       }
     }
   }
+
+  // Load mock notifications
+  loadMockNotifications()
+
+  // Close notifications dropdown when clicking outside
+  document.addEventListener('click', (e) => {
+    const target = e.target as Element
+    if (!target.closest('.notifications-dropdown')) {
+      notificationsOpen.value = false
+    }
+  })
 })
 </script>

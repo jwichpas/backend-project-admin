@@ -181,9 +181,10 @@ DECLARE
   prev_total numeric(18,6) := 0;
   prev_unit numeric(18,6) := 0;
   valuation_method text;
+  v_local VARCHAR(3);
 BEGIN
   -- Obtener método de valuación de la empresa
-  SELECT c.valuation_method INTO valuation_method
+  SELECT c.valuation_method, c.currency_code INTO valuation_method, v_local
   FROM companies c
   WHERE c.id = NEW.company_id;
 
@@ -237,6 +238,29 @@ BEGIN
   NEW.balance_qty := COALESCE(NEW.balance_qty, 0);
   NEW.balance_total_cost := COALESCE(NEW.balance_total_cost, 0);
   NEW.balance_unit_cost := COALESCE(NEW.balance_unit_cost, 0);
+
+  -- Convertir total cost a monedas de referencia
+    IF NEW.balance_total_cost IS NOT NULL and v_local IS NOT NULL THEN
+        NEW.balance_unit_cost_local :=
+            convert_currency(NEW.balance_unit_cost, NEW.original_currency_code, v_local, NEW.movement_date);
+
+        NEW.balance_unit_cost_usd :=
+            convert_currency(NEW.balance_unit_cost, NEW.original_currency_code, 'USD', NEW.movement_date);
+
+        NEW.balance_unit_cost_clp :=
+            convert_currency(NEW.balance_unit_cost, NEW.original_currency_code, 'CLP', NEW.movement_date);
+
+
+
+        NEW.balance_total_cost_local :=
+            convert_currency(NEW.balance_total_cost, NEW.original_currency_code, v_local, NEW.movement_date);
+
+        NEW.balance_total_cost_usd :=
+            convert_currency(NEW.balance_total_cost, NEW.original_currency_code, 'USD', NEW.movement_date);
+
+        NEW.balance_total_cost_clp :=
+            convert_currency(NEW.balance_total_cost, NEW.original_currency_code, 'CLP', NEW.movement_date);
+    END IF;
 
   RETURN NEW;
 END;
@@ -809,6 +833,8 @@ BEGIN
             qty_out,
             unit_cost_out,
             total_cost_out,
+
+            original_currency_code,
             source,
             source_id,
             created_at
@@ -825,6 +851,7 @@ BEGIN
             NEW.quantity_shipped,
             v_unit_cost,
             v_unit_cost * NEW.quantity_shipped,
+            v_sales_doc.currency_code,
             'shipments',
             v_shipment.id,
             NOW()
@@ -1413,3 +1440,167 @@ AS $$
       AND p.active = true
     ORDER BY w.name, p.name;
 $$;
+
+
+-- 2. FUNCIONES DE CONVERSIÓN
+-- 2.1. Obtener tipo de cambio
+CREATE OR REPLACE FUNCTION get_exchange_rate(
+    p_currency_from VARCHAR,
+    p_currency_to   VARCHAR,
+    p_date DATE
+)
+RETURNS NUMERIC AS $$
+DECLARE
+    v_rate NUMERIC;
+BEGIN
+    IF p_currency_from = p_currency_to THEN
+        RETURN 1;
+    END IF;
+
+    SELECT rate INTO v_rate
+    FROM exchange_rates
+    WHERE from_currency_code = p_currency_from
+      AND to_currency_code = p_currency_to
+      AND rate_date <= p_date
+    ORDER BY rate_date DESC
+    LIMIT 1;
+
+    IF v_rate IS NULL THEN
+        RAISE EXCEPTION 'No existe tipo de cambio para %/% en fecha %',
+            p_currency_from, p_currency_to, p_date;
+    END IF;
+
+    RETURN v_rate;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+-- 2.2. Convertir monto simple
+CREATE OR REPLACE FUNCTION convert_currency(
+    p_amount NUMERIC,
+    p_currency_from VARCHAR,
+    p_currency_to VARCHAR,
+    p_date DATE
+)
+RETURNS NUMERIC AS $$
+DECLARE
+    v_rate NUMERIC;
+BEGIN
+    v_rate := get_exchange_rate(p_currency_from, p_currency_to, p_date);
+    RETURN ROUND(p_amount * v_rate, 6);
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+
+-- 4. TRIGGERS MULTIMONEDA
+-- 4.1. Documentos de compras y ventas
+CREATE OR REPLACE FUNCTION set_multi_currency_values()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_local VARCHAR(3);
+BEGIN
+    -- Moneda funcional de la empresa
+    SELECT currency_code INTO v_local
+    FROM companies WHERE id = NEW.company_id;
+
+    -- Moneda local
+    IF NEW.total IS NOT NULL THEN
+
+        NEW.total_ope_gravadas_local := convert_currency(NEW.total_ope_gravadas, NEW.currency_code, v_local, NEW.issue_date);
+        -- Siempre convertir a USD
+        NEW.total_ope_gravadas_usd := convert_currency(NEW.total_ope_gravadas, NEW.currency_code, 'USD', NEW.issue_date);
+        -- Siempre convertir a CLP
+        NEW.total_ope_gravadas_clp := convert_currency(NEW.total_ope_gravadas, NEW.currency_code, 'CLP', NEW.issue_date);
+
+
+        NEW.total_local := convert_currency(NEW.total, NEW.currency_code, v_local, NEW.issue_date);
+        -- Siempre convertir a USD
+        NEW.total_usd := convert_currency(NEW.total, NEW.currency_code, 'USD', NEW.issue_date);
+        -- Siempre convertir a CLP
+        NEW.total_clp := convert_currency(NEW.total, NEW.currency_code, 'CLP', NEW.issue_date);
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_multi_currency_purchase ON purchase_docs;
+CREATE TRIGGER trg_multi_currency_purchase
+BEFORE INSERT OR UPDATE ON purchase_docs
+FOR EACH ROW
+EXECUTE FUNCTION set_multi_currency_values();
+
+DROP TRIGGER IF EXISTS trg_multi_currency_sales ON sales_docs;
+CREATE TRIGGER trg_multi_currency_sales
+BEFORE INSERT OR UPDATE ON sales_docs
+FOR EACH ROW
+EXECUTE FUNCTION set_multi_currency_values();
+
+
+-- 4.2. Stock Ledger
+CREATE OR REPLACE FUNCTION set_stock_multi_currency()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_local VARCHAR(3);
+BEGIN
+    SELECT currency_code INTO v_local
+    FROM companies WHERE id = NEW.company_id;
+
+    -- Convertir total cost a monedas de referencia
+    IF NEW.balance_total_cost IS NOT NULL THEN
+        NEW.balance_unit_cost_local :=
+            convert_currency(NEW.balance_unit_cost, NEW.original_currency_code, v_local, NEW.movement_date);
+
+        NEW.balance_unit_cost_usd :=
+            convert_currency(NEW.balance_unit_cost, NEW.original_currency_code, 'USD', NEW.movement_date);
+
+        NEW.balance_unit_cost_clp :=
+            convert_currency(NEW.balance_unit_cost, NEW.original_currency_code, 'CLP', NEW.movement_date);
+
+
+
+        NEW.balance_total_cost_local :=
+            convert_currency(NEW.balance_total_cost, NEW.original_currency_code, v_local, NEW.movement_date);
+
+        NEW.balance_total_cost_usd :=
+            convert_currency(NEW.balance_total_cost, NEW.original_currency_code, 'USD', NEW.movement_date);
+
+        NEW.balance_total_cost_clp :=
+            convert_currency(NEW.balance_total_cost, NEW.original_currency_code, 'CLP', NEW.movement_date);
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+DROP TRIGGER IF EXISTS trg_stock_multi_currency ON stock_ledger;
+CREATE TRIGGER trg_stock_multi_currency
+BEFORE INSERT OR UPDATE ON stock_ledger
+FOR EACH ROW
+EXECUTE FUNCTION set_stock_multi_currency();
+
+-- 5. VISTAS DE REPORTING
+-- 5.1. Ventas multimoneda
+CREATE OR REPLACE VIEW v_sales_multi_currency AS
+SELECT
+    s.id,
+    s.company_id,
+    s.issue_date,
+    s.currency_code AS original_currency,
+    s.total AS total_original,
+    s.total_local,
+    s.total_usd,
+    s.total_clp
+FROM sales_docs s;
+
+-- 5.2. Compras multimoneda
+CREATE OR REPLACE VIEW v_purchases_multi_currency AS
+SELECT
+    p.id,
+    p.company_id,
+    p.issue_date,
+    p.currency_code AS original_currency,
+    p.total AS total_original,
+    p.total_local,
+    p.total_usd,
+    p.total_clp
+FROM purchase_docs p;
+
