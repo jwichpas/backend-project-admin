@@ -257,12 +257,13 @@
                 required
               >
                 <option value="">Seleccionar unidad</option>
-                <option value="UNIDAD">Unidad</option>
-                <option value="KG">Kilogramo</option>
-                <option value="LT">Litro</option>
-                <option value="M">Metro</option>
-                <option value="M2">Metro Cuadrado</option>
-                <option value="M3">Metro Cúbico</option>
+                <option 
+                  v-for="unit in measurementUnits" 
+                  :key="unit.code" 
+                  :value="unit.code"
+                >
+                  {{ unit.code }} - {{ unit.descripcion }}
+                </option>
               </select>
             </div>
             
@@ -311,7 +312,7 @@
             ></textarea>
           </div>
 
-          <div class="grid gap-4 md:grid-cols-2">
+          <div class="grid gap-4 md:grid-cols-3">
             <div>
               <label class="text-sm font-medium">Stock Mínimo</label>
               <Input
@@ -323,6 +324,30 @@
               />
             </div>
             
+            <div>
+              <label class="text-sm font-medium">Stock Máximo</label>
+              <Input
+                v-model.number="productForm.max_stock"
+                type="number"
+                :min="productForm.min_stock"
+                placeholder="100"
+                class="mt-1"
+              />
+            </div>
+            
+            <div>
+              <label class="text-sm font-medium">Punto de Reorden</label>
+              <Input
+                v-model.number="productForm.reorder_point"
+                type="number"
+                min="0"
+                placeholder="30"
+                class="mt-1"
+              />
+            </div>
+          </div>
+
+          <div class="grid gap-4 md:grid-cols-1">
             <div>
               <label class="text-sm font-medium">Tipo de Afectación SUNAT</label>
               <select
@@ -719,12 +744,13 @@
                 required
               >
                 <option value="">Seleccionar unidad</option>
-                <option value="UNIDAD">Unidad</option>
-                <option value="KG">Kilogramo</option>
-                <option value="LT">Litro</option>
-                <option value="M">Metro</option>
-                <option value="M2">Metro Cuadrado</option>
-                <option value="M3">Metro Cúbico</option>
+                <option 
+                  v-for="unit in measurementUnits" 
+                  :key="unit.code" 
+                  :value="unit.code"
+                >
+                  {{ unit.code }} - {{ unit.descripcion }}
+                </option>
               </select>
             </div>
             
@@ -773,7 +799,7 @@
             ></textarea>
           </div>
 
-          <div class="grid gap-4 md:grid-cols-2">
+          <div class="grid gap-4 md:grid-cols-3">
             <div>
               <label class="text-sm font-medium">Stock Mínimo</label>
               <Input
@@ -785,6 +811,30 @@
               />
             </div>
             
+            <div>
+              <label class="text-sm font-medium">Stock Máximo</label>
+              <Input
+                v-model.number="productForm.max_stock"
+                type="number"
+                :min="productForm.min_stock"
+                placeholder="100"
+                class="mt-1"
+              />
+            </div>
+            
+            <div>
+              <label class="text-sm font-medium">Punto de Reorden</label>
+              <Input
+                v-model.number="productForm.reorder_point"
+                type="number"
+                min="0"
+                placeholder="30"
+                class="mt-1"
+              />
+            </div>
+          </div>
+
+          <div class="grid gap-4 md:grid-cols-1">
             <div>
               <label class="text-sm font-medium">Tipo de Afectación SUNAT</label>
               <select
@@ -851,6 +901,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useCompanyStore } from '@/stores/company'
 import { useProductsStore, type ProductFull } from '@/stores/products'
+import { sunatMeasurementUnitsService, type SunatCatalogItem } from '@/services/sunatService'
 import {
   Download,
   Plus,
@@ -902,19 +953,28 @@ const selectedBrand = ref('')
 const selectedPriceList = ref('')
 const selectedStatus = ref('')
 
+// SUNAT data
+const measurementUnits = ref<SunatCatalogItem[]>([])
+
 // Product form
 const productForm = ref({
   name: '',
   sku: '',
   barcode: '',
   description: '',
-  unit_code: 'UNIDAD',
+  unit_code: 'NIU',
   brand_id: '',
   category_id: '',
   tipo_afectacion: '10', // Default SUNAT affectation type
+  width: 0,
+  height: 0,
+  length: 0,
+  weight_kg: 0,
   is_serialized: false,
   is_batch_controlled: false,
   min_stock: 20,
+  max_stock: 100, // Must be >= min_stock
+  reorder_point: 30,
   active: true
 })
 
@@ -1066,6 +1126,15 @@ const loadProducts = async () => {
   )
 }
 
+const loadMeasurementUnits = async () => {
+  try {
+    measurementUnits.value = await sunatMeasurementUnitsService.getAll()
+    console.log('Measurement units loaded:', measurementUnits.value.length)
+  } catch (error) {
+    console.error('Error loading measurement units:', error)
+  }
+}
+
 const submitProductForm = async () => {
   try {
     if (!companyStore.selectedCompany) return
@@ -1103,7 +1172,7 @@ const cancelProductForm = () => {
     sku: '',
     barcode: '',
     description: '',
-    unit_code: 'UNIDAD',
+    unit_code: 'NIU',
     brand_id: '',
     category_id: '',
     tipo_afectacion: '10',
@@ -1134,7 +1203,7 @@ const editProduct = (product: ProductFull) => {
     sku: product.sku || '',
     barcode: product.barcode || '',
     description: product.description || '',
-    unit_code: product.unit_code || 'UNIDAD',
+    unit_code: product.unit_code || 'NIU',
     brand_id: product.brand_id || '',
     category_id: product.category_id || '',
     tipo_afectacion: '10', // Se debería obtener del producto
@@ -1226,7 +1295,8 @@ onMounted(async () => {
         productsStore.fetchCategories(companyStore.selectedCompany.id),
         productsStore.fetchWarehouses(companyStore.selectedCompany.id),
         productsStore.fetchPriceLists(companyStore.selectedCompany.id),
-        productsStore.fetchInventoryItems(companyStore.selectedCompany.id)
+        productsStore.fetchInventoryItems(companyStore.selectedCompany.id),
+        loadMeasurementUnits()
       ])
       
       // Set default price list (first one found) and load products
