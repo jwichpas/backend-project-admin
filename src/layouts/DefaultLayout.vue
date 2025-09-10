@@ -45,10 +45,53 @@
             <p v-if="!isCollapsed" class="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Compras</p>
           </li>
           <li>
-            <router-link to="/purchases" class="group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors" :class="getNavClass('/purchases')">
-              <ShoppingCart class="mr-3 h-5 w-5 transition-colors" :class="getIconClass('/purchases')" />
-              <span v-if="!isCollapsed">Compras</span>
-            </router-link>
+            <div class="relative">
+              <button
+                @click="togglePurchasesMenu"
+                class="group flex items-center w-full rounded-md px-3 py-2 text-sm font-medium transition-colors"
+                :class="getNavClass('/purchases')"
+              >
+                <ShoppingCart class="mr-3 h-5 w-5 transition-colors" :class="getIconClass('/purchases')" />
+                <span v-if="!isCollapsed" class="flex-1 text-left">Compras</span>
+                <ChevronDown
+                  v-if="!isCollapsed"
+                  class="h-4 w-4 transition-transform"
+                  :class="{ 'rotate-180': purchasesMenuOpen }"
+                />
+              </button>
+
+              <!-- Purchases Submenu -->
+              <div v-if="purchasesMenuOpen && !isCollapsed" class="mt-1 space-y-1 pl-6">
+                <router-link
+                  to="/purchases"
+                  class="block rounded-md px-3 py-2 text-sm transition-colors"
+                  :class="getSubmenuClass('/purchases')"
+                >
+                  Dashboard de Compras
+                </router-link>
+                <router-link
+                  to="/purchases/orders"
+                  class="block rounded-md px-3 py-2 text-sm transition-colors"
+                  :class="getSubmenuClass('/purchases/orders')"
+                >
+                  Órdenes de Compra
+                </router-link>
+                <router-link
+                  to="/purchases/docs"
+                  class="block rounded-md px-3 py-2 text-sm transition-colors"
+                  :class="getSubmenuClass('/purchases/docs')"
+                >
+                  Documentos de Compra
+                </router-link>
+                <router-link
+                  to="/purchases/receptions"
+                  class="block rounded-md px-3 py-2 text-sm transition-colors"
+                  :class="getSubmenuClass('/purchases/receptions')"
+                >
+                  Recepciones
+                </router-link>
+              </div>
+            </div>
           </li>
           <li>
             <router-link to="/suppliers" class="group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors" :class="getNavClass('/suppliers')">
@@ -166,6 +209,12 @@
             <router-link to="/sunat" class="group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors" :class="getNavClass('/sunat')">
               <FileText class="mr-3 h-5 w-5 transition-colors" :class="getIconClass('/sunat')" />
               <span v-if="!isCollapsed">Catálogos SUNAT</span>
+            </router-link>
+          </li>
+          <li>
+            <router-link to="/exchange-rates" class="group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors" :class="getNavClass('/exchange-rates')">
+              <DollarSign class="mr-3 h-5 w-5 transition-colors" :class="getIconClass('/exchange-rates')" />
+              <span v-if="!isCollapsed">Tipos de Cambio</span>
             </router-link>
           </li>
 
@@ -347,7 +396,7 @@ import { useAuthStore } from '@/stores/auth'
 import {
   Menu, LayoutDashboard, Settings, Moon, Sun, User,
   Receipt, Users, ShoppingCart, Truck, Package, Warehouse, BarChart3,
-  Building, MapPin, FileText, ChevronDown, Bell
+  Building, MapPin, FileText, ChevronDown, Bell, DollarSign
 } from 'lucide-vue-next'
 import Select from '@/components/ui/Select.vue'
 import { supabase } from '@/lib/supabase'
@@ -378,12 +427,14 @@ const authStore = useAuthStore()
 const isCollapsed = ref(false)
 const userMenuOpen = ref(false)
 const productsMenuOpen = ref(false)
+const purchasesMenuOpen = ref(false)
 const notificationsOpen = ref(false)
 const exchangeRates = ref<ExchangeRate[]>([])
 const notifications = ref<Notification[]>([])
 
 const toggleCollapse = () => { isCollapsed.value = !isCollapsed.value }
 const toggleProductsMenu = () => { productsMenuOpen.value = !productsMenuOpen.value }
+const togglePurchasesMenu = () => { purchasesMenuOpen.value = !purchasesMenuOpen.value }
 const toggleNotifications = () => { notificationsOpen.value = !notificationsOpen.value }
 
 // Company and Branch selection
@@ -460,6 +511,9 @@ const getPageTitle = () => {
     'products-locations': 'Ubicaciones',
     'sales': 'Ventas',
     'purchases': 'Compras',
+    'purchases-orders': 'Órdenes de Compra',
+    'purchases-docs': 'Documentos de Compra', 
+    'purchases-receptions': 'Recepciones',
     'inventory': 'Inventario',
     'customers': 'Clientes',
     'suppliers': 'Proveedores',
@@ -467,6 +521,7 @@ const getPageTitle = () => {
     'reports': 'Reportes',
     'companies': 'Empresas',
     'branches': 'Sucursales',
+    'exchange-rates': 'Tipos de Cambio',
     'settings': 'Configuración'
   }
   return routeNames[route.name as string] || 'Sistema ERP'
@@ -591,6 +646,10 @@ watch(route, (newRoute) => {
   // Auto-open products menu when visiting products routes
   if (newRoute.path.startsWith('/products')) {
     productsMenuOpen.value = true
+  }
+  // Auto-open purchases menu when visiting purchases routes
+  if (newRoute.path.startsWith('/purchases')) {
+    purchasesMenuOpen.value = true
   }
 }, { immediate: true })
 

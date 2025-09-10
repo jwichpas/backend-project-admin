@@ -103,7 +103,7 @@
 
     <!-- Create/Edit Price List Dialog -->
     <Dialog v-model:open="showCreateDialog">
-      <DialogContent class="max-w-md" v-slot="{ close }">
+      <DialogContent class="max-w-md">
         <DialogHeader>
           <DialogTitle>
             {{ editingPriceList ? 'Editar Lista de Precios' : 'Nueva Lista de Precios' }}
@@ -127,10 +127,18 @@
               v-model="priceListForm.currency_code"
               class="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               required
+              :disabled="currenciesLoading"
             >
-              <option value="PEN">Soles (PEN)</option>
-              <option value="USD">Dólares (USD)</option>
-              <option value="EUR">Euros (EUR)</option>
+              <option value="" disabled>
+                {{ currenciesLoading ? 'Cargando monedas...' : 'Seleccionar moneda' }}
+              </option>
+              <option 
+                v-for="option in currencyOptions" 
+                :key="option.value" 
+                :value="option.value"
+              >
+                {{ option.label }}
+              </option>
             </select>
           </div>
 
@@ -160,7 +168,7 @@
 
     <!-- Price List Items Dialog -->
     <Dialog v-model:open="showItemsDialog">
-      <DialogContent class="max-w-4xl" v-slot="{ close }">
+      <DialogContent class="max-w-4xl">
         <DialogHeader>
           <DialogTitle>
             {{ selectedPriceList?.name }} - Productos
@@ -188,7 +196,7 @@
                 </select>
                 
                 <Input
-                  v-model.number="itemForm.unit_price"
+                  v-model="itemForm.unit_price"
                   type="number"
                   step="0.01"
                   placeholder="Precio unitario"
@@ -270,6 +278,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useCompanyStore } from '@/stores/company'
 import { useProductsStore, type PriceList, type PriceListItem } from '@/stores/products'
 import { supabase } from '@/lib/supabase'
+import { sunatCurrenciesService, type SunatCatalogItem } from '@/services/sunatService'
 import { Plus, DollarSign, Eye, Edit, Trash2 } from 'lucide-vue-next'
 
 // UI Components
@@ -301,16 +310,18 @@ const showItemsDialog = ref(false)
 const editingPriceList = ref<PriceList | null>(null)
 const selectedPriceList = ref<PriceList | null>(null)
 const priceListItems = ref<PriceListItem[]>([])
+const currencies = ref<SunatCatalogItem[]>([])
+const currenciesLoading = ref(false)
 
 const priceListForm = ref({
   name: '',
-  currency_code: 'PEN',
+  currency_code: '',
   is_default: false
 })
 
 const itemForm = ref({
   product_id: '',
-  unit_price: 0,
+  unit_price: '0',
   valid_from: new Date().toISOString().split('T')[0]
 })
 
@@ -320,7 +331,36 @@ const availableProducts = computed(() => {
   return productsStore.products.filter(product => !usedProductIds.has(product.id))
 })
 
+const currencyOptions = computed(() => {
+  return currencies.value.map(currency => ({
+    value: currency.code,
+    label: `${currency.code} - ${currency.descripcion}`
+  }))
+})
+
 // Methods
+const loadCurrencies = async () => {
+  currenciesLoading.value = true
+  try {
+    const data = await sunatCurrenciesService.getAll()
+    currencies.value = data
+  } catch (error) {
+    console.error('Error loading currencies:', error)
+    // Fallback to basic currencies
+    currencies.value = [
+      { code: 'PEN', descripcion: 'Sol Peruano' },
+      { code: 'USD', descripcion: 'Dólar Americano' },
+      { code: 'EUR', descripcion: 'Euro' }
+    ]
+  } finally {
+    currenciesLoading.value = false
+    // Set default currency after loading
+    if (currencies.value.length > 0 && !priceListForm.value.currency_code) {
+      priceListForm.value.currency_code = currencies.value.find(c => c.code === 'PEN')?.code || currencies.value[0]?.code || 'PEN'
+    }
+  }
+}
+
 const getPriceListItemCount = (priceListId: string): number => {
   return productsStore.priceListItems.filter(item => item.price_list_id === priceListId).length
 }
@@ -406,7 +446,7 @@ const cancelPriceListForm = () => {
   editingPriceList.value = null
   priceListForm.value = {
     name: '',
-    currency_code: 'PEN',
+    currency_code: currencies.value.length > 0 ? currencies.value.find(c => c.code === 'PEN')?.code || currencies.value[0]?.code || 'PEN' : 'PEN',
     is_default: false
   }
 }
@@ -421,7 +461,7 @@ const addPriceListItem = async () => {
         company_id: companyStore.selectedCompany?.id || '',
         price_list_id: selectedPriceList.value.id,
         product_id: itemForm.value.product_id,
-        unit_price: itemForm.value.unit_price,
+        unit_price: parseFloat(itemForm.value.unit_price),
         valid_from: itemForm.value.valid_from
       })
       .select()
@@ -436,7 +476,7 @@ const addPriceListItem = async () => {
     // Reset form
     itemForm.value = {
       product_id: '',
-      unit_price: 0,
+      unit_price: '0',
       valid_from: new Date().toISOString().split('T')[0]
     }
   } catch (error) {
@@ -464,6 +504,9 @@ const removePriceListItem = async (item: PriceListItem) => {
 }
 
 onMounted(async () => {
+  // Load currencies first
+  await loadCurrencies()
+  
   if (companyStore.selectedCompany) {
     await Promise.all([
       productsStore.fetchPriceLists(companyStore.selectedCompany.id),

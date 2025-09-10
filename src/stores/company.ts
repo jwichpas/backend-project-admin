@@ -45,14 +45,20 @@ export const useCompanyStore = defineStore('company', {
     async fetchCompanies() {
       this.loading = true
       try {
+        console.log('Fetching companies from Supabase...')
         const { data, error } = await supabase
           .from('companies')
           .select('*')
           .order('legal_name')
 
-        if (error) throw error
+        if (error) {
+          console.error('Supabase error fetching companies:', error)
+          throw error
+        }
+        
         this.companies = data || []
-        console.log('Companies loaded:', this.companies)
+        console.log('Companies loaded:', this.companies.length, 'companies found')
+        console.log('Company data:', this.companies)
       } catch (error: any) {
         console.error('Error fetching companies:', error)
       } finally {

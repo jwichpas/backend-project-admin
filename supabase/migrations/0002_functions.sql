@@ -1392,11 +1392,14 @@ RETURNS TABLE (
     reserved_qty NUMERIC(18,6),
     available_qty NUMERIC(18,6),
     average_cost NUMERIC(18,6),
-    min_stock NUMERIC(18,6),
-    max_stock NUMERIC(18,6)
+    original_currency TEXT,
+    min_stock NUMERIC(18,6),  -- Cambiado a NUMERIC explícito
+    max_stock NUMERIC(18,6)   -- Cambiado a NUMERIC explícito
 )
-LANGUAGE sql
+LANGUAGE plpgsql
 AS $$
+BEGIN
+    RETURN QUERY
     WITH reserved AS (
         SELECT soi.product_id,
                so.company_id,
@@ -1404,8 +1407,21 @@ AS $$
         FROM sales_orders so
         JOIN sales_order_items soi ON soi.sales_order_id = so.id
         WHERE (p_company_id IS NULL OR so.company_id = p_company_id)
-          AND so.status IN ('PENDING','APPROVED') -- pedidos no enviados aún
+          AND so.status IN ('PENDING','APPROVED')
         GROUP BY soi.product_id, so.company_id
+    ),
+    latest_cost AS (
+        SELECT 
+            sl.product_id,
+            sl.warehouse_id,
+            sl.balance_unit_cost,
+            sl.original_currency_code::TEXT as original_currency_code,
+            ROW_NUMBER() OVER (
+                PARTITION BY sl.product_id, sl.warehouse_id 
+                ORDER BY sl.movement_date DESC, sl.created_at DESC
+            ) as rn
+        FROM stock_ledger sl
+        WHERE (p_company_id IS NULL OR sl.company_id = p_company_id)
     )
     SELECT 
         p.id AS product_id,
@@ -1413,32 +1429,29 @@ AS $$
         p.sku AS product_sku,
         w.id AS warehouse_id,
         w.name AS warehouse_name,
-        ws.balance_qty,
-        COALESCE(r.reserved_qty, 0) AS reserved_qty,
-        ws.balance_qty - COALESCE(r.reserved_qty, 0) AS available_qty,
-        -- costo promedio móvil (último balance en stock_ledger)
-        COALESCE((
-            SELECT sl.balance_unit_cost
-            FROM stock_ledger sl
-            WHERE sl.company_id = p.company_id
-              AND sl.warehouse_id = w.id
-              AND sl.product_id = p.id
-            ORDER BY sl.movement_date DESC, sl.created_at DESC
-            LIMIT 1
-        ), 0) AS average_cost,
-        p.min_stock,
-        p.max_stock
+        ws.balance_qty::NUMERIC(18,6),  -- Conversión explícita
+        COALESCE(r.reserved_qty, 0)::NUMERIC(18,6) AS reserved_qty,  -- Conversión explícita
+        (ws.balance_qty - COALESCE(r.reserved_qty, 0))::NUMERIC(18,6) AS available_qty,  -- Conversión explícita
+        COALESCE(lc.balance_unit_cost, 0)::NUMERIC(18,6) AS average_cost,  -- Conversión explícita
+        COALESCE(lc.original_currency_code, 'PEN') AS original_currency,
+        p.min_stock::NUMERIC(18,6) AS min_stock,  -- Conversión explícita del dominio quantity
+        p.max_stock::NUMERIC(18,6) AS max_stock   -- Conversión explícita del dominio quantity
     FROM warehouse_stock ws
     JOIN warehouses w ON w.id = ws.warehouse_id
     JOIN products p ON p.id = ws.product_id
     LEFT JOIN reserved r 
            ON r.product_id = p.id 
           AND r.company_id = p.company_id
+    LEFT JOIN latest_cost lc 
+           ON lc.product_id = p.id 
+          AND lc.warehouse_id = w.id
+          AND lc.rn = 1
     WHERE (p_company_id IS NULL OR p.company_id = p_company_id)
       AND (p_warehouse_id IS NULL OR w.id = p_warehouse_id)
       AND (p_category_id IS NULL OR p.category_id = p_category_id)
       AND p.active = true
     ORDER BY w.name, p.name;
+END;
 $$;
 
 
@@ -1603,4 +1616,176 @@ SELECT
     p.total_usd,
     p.total_clp
 FROM purchase_docs p;
+
+
+
+-- ============================================================================
+-- RECOMENDACIONES PARA MANEJO DE COSTOS ADICIONALES EN COMPRAS (FLETES Y OTROS COSTOS LOCALES)
+-- ============================================================================
+
+-- Trigger para actualizar total_otros_cargos en purchase_docs al insertar/actualizar/eliminar costos adicionales.
+CREATE OR REPLACE FUNCTION update_purchase_total_otros_cargos()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_total_otros MONETARY := 0;
+BEGIN
+    -- Calcular suma de costos adicionales (solo los que afectan inventory, o todos según negocio)
+    SELECT SUM(amount_local) INTO v_total_otros
+    FROM purchase_additional_costs
+    WHERE purchase_doc_id = COALESCE(NEW.purchase_doc_id, OLD.purchase_doc_id);
+
+    -- Actualizar purchase_docs
+    UPDATE purchase_docs
+    SET total_otros_cargos = COALESCE(v_total_otros, 0),
+        total = (total_ope_gravadas + total_ope_exoneradas + total_ope_inafectas + total_igv + total_isc + COALESCE(v_total_otros, 0) - total_descuentos),
+        updated_at = NOW()
+    WHERE id = COALESCE(NEW.purchase_doc_id, OLD.purchase_doc_id);
+
+    RETURN NULL;  -- AFTER trigger
+END;
+$$;
+
+CREATE TRIGGER trg_update_purchase_total_otros_cargos
+    AFTER INSERT OR UPDATE OR DELETE ON purchase_additional_costs
+    FOR EACH ROW
+    EXECUTE FUNCTION update_purchase_total_otros_cargos();
+
+-- 4. TRIGGER PARA PRORRATEO DE COSTOS EN purchase_doc_items
+--    - Al insertar/actualizar/eliminar en purchase_additional_costs, si affects_inventory=TRUE y status='PENDING',
+--      distribuye el costo proporcionalmente a los ítems basados en total_line.
+--    - Actualiza unit_cost y total_line en ítems, y recalcula totales en purchase_docs si es necesario.
+CREATE OR REPLACE FUNCTION prorate_additional_costs()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_doc_status TEXT;
+    v_doc_id UUID := COALESCE(NEW.purchase_doc_id, OLD.purchase_doc_id);
+    v_cost RECORD;  -- Para iterar sobre cada costo adicional
+    v_item RECORD;  -- Para iterar sobre ítems
+    v_basis_total NUMERIC(18,6) := 0;  -- Total base para prorrateo (depende del método)
+    v_item_basis NUMERIC(18,6);  -- Base por ítem
+    v_prorate_amount NUMERIC(18,6);  -- Monto prorrateado por ítem por costo
+BEGIN
+    -- Obtener status del documento
+    SELECT status INTO v_doc_status
+    FROM purchase_docs WHERE id = v_doc_id;
+
+    IF v_doc_status != 'PENDING' THEN
+        RAISE NOTICE 'Documento en estado %; no se prorratean costos.', v_doc_status;
+        RETURN NULL;
+    END IF;
+
+    -- Resetear unit_cost y total_line a valores originales en todos los ítems
+    FOR v_item IN
+        SELECT id, quantity, original_unit_cost
+        FROM purchase_doc_items
+        WHERE purchase_doc_id = v_doc_id
+    LOOP
+        UPDATE purchase_doc_items
+        SET unit_cost = v_item.original_unit_cost,
+            total_line = v_item.quantity * v_item.original_unit_cost
+        WHERE id = v_item.id;
+    END LOOP;
+
+    -- Iterar sobre cada costo adicional que afecta inventory
+    FOR v_cost IN
+        SELECT id, amount_local, proration_method
+        FROM purchase_additional_costs
+        WHERE purchase_doc_id = v_doc_id
+          AND affects_inventory = TRUE
+    LOOP
+        -- Calcular basis_total según el método
+        v_basis_total := 0;
+        FOR v_item IN
+            SELECT pdi.id, pdi.quantity, pdi.original_unit_cost, COALESCE(p.weight_kg, 0) AS weight_kg
+            FROM purchase_doc_items pdi
+            JOIN products p ON p.id = pdi.product_id
+            WHERE pdi.purchase_doc_id = v_doc_id
+        LOOP
+            v_item_basis := CASE v_cost.proration_method
+                WHEN 'VALUE' THEN v_item.quantity * v_item.original_unit_cost
+                WHEN 'QUANTITY' THEN v_item.quantity
+                WHEN 'WEIGHT' THEN v_item.quantity * v_item.weight_kg
+                ELSE 0
+            END;
+            v_basis_total := v_basis_total + v_item_basis;
+        END LOOP;
+
+        IF v_basis_total = 0 THEN
+            RAISE NOTICE 'Base total cero para prorrateo con método % en costo %; saltando.', v_cost.proration_method, v_cost.id;
+            CONTINUE;
+        END IF;
+
+        -- Prorratear y actualizar cada ítem
+        FOR v_item IN
+            SELECT pdi.id, pdi.quantity, pdi.unit_cost, pdi.original_unit_cost, COALESCE(p.weight_kg, 0) AS weight_kg
+            FROM purchase_doc_items pdi
+            JOIN products p ON p.id = pdi.product_id
+            WHERE pdi.purchase_doc_id = v_doc_id
+        LOOP
+            v_item_basis := CASE v_cost.proration_method
+                WHEN 'VALUE' THEN v_item.quantity * v_item.original_unit_cost
+                WHEN 'QUANTITY' THEN v_item.quantity
+                WHEN 'WEIGHT' THEN v_item.quantity * v_item.weight_kg
+                ELSE 0
+            END;
+
+            v_prorate_amount := (v_item_basis / v_basis_total) * v_cost.amount_local;
+            UPDATE purchase_doc_items
+            SET unit_cost = unit_cost + (v_prorate_amount / quantity),
+                total_line = total_line + v_prorate_amount
+            WHERE id = v_item.id;
+        END LOOP;
+    END LOOP;
+
+    -- Recalcular totales en purchase_docs (usando trigger existente o lógica adicional)
+    -- Por ejemplo, recalcular igv_amount, total_igv, etc., si los costos adicionales afectan la base imponible.
+    -- Asumir que un trigger como set_multi_currency_values maneja esto; si no, agregar aquí.
+    UPDATE purchase_docs
+    SET updated_at = NOW()  -- Para activar otros triggers si es necesario
+    WHERE id = v_doc_id;
+
+    RETURN NULL;
+END;
+$$;
+
+CREATE TRIGGER trg_prorate_additional_costs
+    AFTER INSERT OR UPDATE OR DELETE ON purchase_additional_costs
+    FOR EACH ROW
+    EXECUTE FUNCTION prorate_additional_costs();
+
+
+-- Trigger para setear original_unit_cost al insertar (si no está seteado).
+CREATE OR REPLACE FUNCTION set_original_unit_cost()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF NEW.original_unit_cost IS NULL THEN
+        NEW.original_unit_cost := NEW.unit_cost;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER trg_set_original_unit_cost
+    BEFORE INSERT ON purchase_doc_items
+    FOR EACH ROW
+    EXECUTE FUNCTION set_original_unit_cost();
+
+-- 5. VISTA PARA REPORTING DE COSTOS ADICIONALES
+CREATE OR REPLACE VIEW v_purchase_additional_costs_summary AS
+SELECT
+    pd.id AS purchase_doc_id,
+    pd.company_id,
+    pd.doc_type || '-' || pd.series || '-' || pd.number AS doc_reference,
+    COUNT(pac.id) AS num_additional_costs,
+    SUM(pac.amount_local) AS total_additional_local,
+    SUM(CASE WHEN pac.affects_inventory THEN pac.amount_local ELSE 0 END) AS total_affecting_inventory
+FROM purchase_docs pd
+LEFT JOIN purchase_additional_costs pac ON pac.purchase_doc_id = pd.id
+GROUP BY pd.id, pd.company_id, doc_reference
+ORDER BY pd.issue_date DESC;
 

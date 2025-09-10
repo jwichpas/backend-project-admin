@@ -62,10 +62,29 @@ const router = createRouter({
       component: () => import('../views/SalesView.vue'),
       meta: { requiresAuth: true }
     },
+    // Purchases module with nested routes
     {
       path: '/purchases',
       name: 'purchases',
-      component: () => import('../views/PurchasesView.vue'),
+      component: () => import('../views/Purchases/PurchasesView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/purchases/orders',
+      name: 'purchases-orders',
+      component: () => import('../views/Purchases/PurchaseOrdersView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/purchases/docs',
+      name: 'purchases-docs',
+      component: () => import('../views/Purchases/PurchaseDocsView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/purchases/receptions',
+      name: 'purchases-receptions',
+      component: () => import('../views/Purchases/ReceptionsView.vue'),
       meta: { requiresAuth: true }
     },
     {
@@ -120,6 +139,12 @@ const router = createRouter({
       path: '/sunat',
       name: 'sunat',
       component: () => import('../views/SunatView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/exchange-rates',
+      name: 'exchange-rates',
+      component: () => import('../views/ExchangeRates.vue'),
       meta: { requiresAuth: true }
     },
     

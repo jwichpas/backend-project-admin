@@ -26,22 +26,22 @@
         <div class="grid gap-4 md:grid-cols-5">
           <div>
             <label class="text-sm font-medium">Buscar</label>
-            <Input 
-              v-model="searchTerm" 
+            <Input
+              v-model="searchTerm"
               placeholder="Nombre, SKU o código de barras..."
               class="mt-1"
             />
           </div>
           <div>
             <label class="text-sm font-medium">Categoría</label>
-            <select 
+            <select
               v-model="selectedCategory"
               class="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <option value="">Todas las categorías</option>
-              <option 
-                v-for="category in productsStore.activeCategories" 
-                :key="category.id" 
+              <option
+                v-for="category in productsStore.activeCategories"
+                :key="category.id"
                 :value="category.id"
               >
                 {{ category.name }}
@@ -50,14 +50,14 @@
           </div>
           <div>
             <label class="text-sm font-medium">Marca</label>
-            <select 
+            <select
               v-model="selectedBrand"
               class="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <option value="">Todas las marcas</option>
-              <option 
-                v-for="brand in productsStore.activeBrands" 
-                :key="brand.id" 
+              <option
+                v-for="brand in productsStore.activeBrands"
+                :key="brand.id"
                 :value="brand.id"
               >
                 {{ brand.name }}
@@ -66,14 +66,14 @@
           </div>
           <div>
             <label class="text-sm font-medium">Lista de Precios</label>
-            <select 
+            <select
               v-model="selectedPriceList"
               class="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <option value="">Sin lista de precios</option>
-              <option 
-                v-for="priceList in productsStore.priceLists" 
-                :key="priceList.id" 
+              <option
+                v-for="priceList in productsStore.priceLists"
+                :key="priceList.id"
                 :value="priceList.id"
               >
                 {{ priceList.name }} ({{ priceList.currency_code }})
@@ -82,7 +82,7 @@
           </div>
           <div>
             <label class="text-sm font-medium">Estado</label>
-            <select 
+            <select
               v-model="selectedStatus"
               class="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
@@ -169,9 +169,9 @@
               <TableCell>
                 <div class="flex items-center gap-2">
                   <span>{{ product.total_stock || 0 }}</span>
-                  <Badge 
-                    v-if="(product.total_stock || 0) < (product.min_stock || 20)" 
-                    variant="warning" 
+                  <Badge
+                    v-if="(product.total_stock || 0) < (product.min_stock || 20)"
+                    variant="warning"
                     class="text-xs"
                   >
                     Bajo
@@ -180,10 +180,11 @@
               </TableCell>
               <TableCell>
                 <div v-if="product.unit_price && product.currency_code">
-                  <span class="font-medium">{{ formatCurrency(product.unit_price, product.currency_code) }}</span>
-                  <span v-if="product.discount_value" class="text-xs text-green-600 ml-1">
-                    (-{{ product.discount_value }}%)
-                  </span>
+                  <PriceDisplay 
+                    :price="product.unit_price" 
+                    :currency="product.currency_code"
+                    :discount="product.discount_value"
+                  />
                 </div>
                 <span v-else class="text-muted-foreground">-</span>
               </TableCell>
@@ -217,7 +218,7 @@
         <DialogHeader>
           <DialogTitle>Nuevo Producto</DialogTitle>
         </DialogHeader>
-        
+
         <form @submit.prevent="submitProductForm" class="space-y-6">
           <div class="grid gap-4 md:grid-cols-2">
             <div>
@@ -229,7 +230,7 @@
                 class="mt-1"
               />
             </div>
-            
+
             <div>
               <label class="text-sm font-medium">SKU</label>
               <Input
@@ -239,7 +240,7 @@
                 class="mt-1"
               />
             </div>
-            
+
             <div>
               <label class="text-sm font-medium">Código de Barras</label>
               <Input
@@ -248,7 +249,7 @@
                 class="mt-1"
               />
             </div>
-            
+
             <div>
               <label class="text-sm font-medium">Unidad de Medida</label>
               <select
@@ -257,16 +258,16 @@
                 required
               >
                 <option value="">Seleccionar unidad</option>
-                <option 
-                  v-for="unit in measurementUnits" 
-                  :key="unit.code" 
+                <option
+                  v-for="unit in measurementUnits"
+                  :key="unit.code"
                   :value="unit.code"
                 >
                   {{ unit.code }} - {{ unit.descripcion }}
                 </option>
               </select>
             </div>
-            
+
             <div>
               <label class="text-sm font-medium">Marca</label>
               <select
@@ -274,16 +275,16 @@
                 class="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <option value="">Sin marca</option>
-                <option 
-                  v-for="brand in productsStore.brands" 
-                  :key="brand.id" 
+                <option
+                  v-for="brand in productsStore.brands"
+                  :key="brand.id"
                   :value="brand.id"
                 >
                   {{ brand.name }}
                 </option>
               </select>
             </div>
-            
+
             <div>
               <label class="text-sm font-medium">Categoría</label>
               <select
@@ -291,9 +292,9 @@
                 class="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <option value="">Sin categoría</option>
-                <option 
-                  v-for="category in productsStore.categories" 
-                  :key="category.id" 
+                <option
+                  v-for="category in productsStore.categories"
+                  :key="category.id"
                   :value="category.id"
                 >
                   {{ category.name }}
@@ -301,7 +302,7 @@
               </select>
             </div>
           </div>
-          
+
           <div>
             <label class="text-sm font-medium">Descripción</label>
             <textarea
@@ -323,7 +324,7 @@
                 class="mt-1"
               />
             </div>
-            
+
             <div>
               <label class="text-sm font-medium">Stock Máximo</label>
               <Input
@@ -334,7 +335,7 @@
                 class="mt-1"
               />
             </div>
-            
+
             <div>
               <label class="text-sm font-medium">Punto de Reorden</label>
               <Input
@@ -374,7 +375,7 @@
               />
               <label for="is_serialized" class="text-sm font-medium">Producto serializado</label>
             </div>
-            
+
             <div class="flex items-center space-x-2">
               <input
                 id="is_batch_controlled"
@@ -413,7 +414,7 @@
                 @change="handleImageSelection"
               />
             </div>
-            
+
             <!-- Image Previews -->
             <div v-if="imagePreviewUrls.length > 0" class="grid gap-4 grid-cols-2 md:grid-cols-4">
               <div
@@ -442,7 +443,7 @@
                 </div>
               </div>
             </div>
-            
+
             <!-- Upload Hint -->
             <div v-else class="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 text-center">
               <Upload class="h-8 w-8 text-muted-foreground mx-auto mb-2" />
@@ -469,7 +470,7 @@
         <DialogHeader>
           <DialogTitle>Filtros Avanzados</DialogTitle>
         </DialogHeader>
-        
+
         <div class="space-y-4">
           <div class="grid gap-4 md:grid-cols-2">
             <div>
@@ -483,7 +484,7 @@
                 class="mt-1"
               />
             </div>
-            
+
             <div>
               <label class="text-sm font-medium">Precio Máximo</label>
               <Input
@@ -508,7 +509,7 @@
                 class="mt-1"
               />
             </div>
-            
+
             <div>
               <label class="text-sm font-medium">Stock Máximo</label>
               <Input
@@ -568,15 +569,15 @@
         <DialogHeader>
           <DialogTitle>Detalles del Producto</DialogTitle>
         </DialogHeader>
-        
+
         <div v-if="selectedProduct" class="space-y-6">
           <div class="grid gap-6 md:grid-cols-3">
             <!-- Imagen del producto -->
             <div class="space-y-4">
               <div class="aspect-square rounded-lg border overflow-hidden bg-muted">
-                <img 
-                  v-if="selectedProduct.main_image" 
-                  :src="selectedProduct.main_image" 
+                <img
+                  v-if="selectedProduct.main_image"
+                  :src="selectedProduct.main_image"
                   :alt="selectedProduct.product_name"
                   class="w-full h-full object-cover"
                 />
@@ -585,7 +586,7 @@
                 </div>
               </div>
             </div>
-            
+
             <!-- Información básica -->
             <div class="md:col-span-2 space-y-4">
               <div class="grid gap-4 md:grid-cols-2">
@@ -593,40 +594,40 @@
                   <label class="text-sm font-medium text-muted-foreground">Nombre</label>
                   <p class="text-lg font-semibold">{{ selectedProduct.product_name }}</p>
                 </div>
-                
+
                 <div>
                   <label class="text-sm font-medium text-muted-foreground">SKU</label>
                   <code class="bg-muted px-2 py-1 rounded text-sm">{{ selectedProduct.sku }}</code>
                 </div>
-                
+
                 <div>
                   <label class="text-sm font-medium text-muted-foreground">Código de Barras</label>
                   <p>{{ selectedProduct.barcode || '-' }}</p>
                 </div>
-                
+
                 <div>
                   <label class="text-sm font-medium text-muted-foreground">Unidad de Medida</label>
                   <p>{{ selectedProduct.unit_code }}</p>
                 </div>
-                
+
                 <div>
                   <label class="text-sm font-medium text-muted-foreground">Marca</label>
                   <p>{{ selectedProduct.brand_name || '-' }}</p>
                 </div>
-                
+
                 <div>
                   <label class="text-sm font-medium text-muted-foreground">Categoría</label>
                   <p>{{ selectedProduct.category_name || '-' }}</p>
                 </div>
               </div>
-              
+
               <div>
                 <label class="text-sm font-medium text-muted-foreground">Descripción</label>
                 <p class="text-sm">{{ selectedProduct.description || 'Sin descripción' }}</p>
               </div>
             </div>
           </div>
-          
+
           <!-- Información de inventario y precios -->
           <div class="grid gap-6 md:grid-cols-3">
             <Card>
@@ -648,7 +649,7 @@
                 </div>
               </CardContent>
             </Card>
-            
+
             <Card>
               <CardHeader>
                 <CardTitle class="text-base">Precios</CardTitle>
@@ -656,18 +657,18 @@
               <CardContent class="space-y-3">
                 <div class="flex justify-between">
                   <span class="text-sm text-muted-foreground">Precio:</span>
-                  <span v-if="selectedProduct.unit_price" class="font-medium">
-                    {{ formatCurrency(selectedProduct.unit_price, selectedProduct.currency_code || 'PEN') }}
-                  </span>
+                  <div v-if="selectedProduct.unit_price && selectedProduct.currency_code">
+                    <PriceDisplay 
+                      :price="selectedProduct.unit_price" 
+                      :currency="selectedProduct.currency_code"
+                      :discount="selectedProduct.discount_value"
+                    />
+                  </div>
                   <span v-else class="text-muted-foreground">-</span>
-                </div>
-                <div class="flex justify-between" v-if="selectedProduct.discount_value">
-                  <span class="text-sm text-muted-foreground">Descuento:</span>
-                  <span class="font-medium text-green-600">{{ selectedProduct.discount_value }}%</span>
                 </div>
               </CardContent>
             </Card>
-            
+
             <Card>
               <CardHeader>
                 <CardTitle class="text-base">Estado</CardTitle>
@@ -704,7 +705,7 @@
         <DialogHeader>
           <DialogTitle>Editar Producto</DialogTitle>
         </DialogHeader>
-        
+
         <form @submit.prevent="submitProductForm" class="space-y-6">
           <div class="grid gap-4 md:grid-cols-2">
             <div>
@@ -716,7 +717,7 @@
                 class="mt-1"
               />
             </div>
-            
+
             <div>
               <label class="text-sm font-medium">SKU</label>
               <Input
@@ -726,7 +727,7 @@
                 class="mt-1"
               />
             </div>
-            
+
             <div>
               <label class="text-sm font-medium">Código de Barras</label>
               <Input
@@ -735,7 +736,7 @@
                 class="mt-1"
               />
             </div>
-            
+
             <div>
               <label class="text-sm font-medium">Unidad de Medida</label>
               <select
@@ -744,16 +745,16 @@
                 required
               >
                 <option value="">Seleccionar unidad</option>
-                <option 
-                  v-for="unit in measurementUnits" 
-                  :key="unit.code" 
+                <option
+                  v-for="unit in measurementUnits"
+                  :key="unit.code"
                   :value="unit.code"
                 >
                   {{ unit.code }} - {{ unit.descripcion }}
                 </option>
               </select>
             </div>
-            
+
             <div>
               <label class="text-sm font-medium">Marca</label>
               <select
@@ -761,16 +762,16 @@
                 class="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <option value="">Sin marca</option>
-                <option 
-                  v-for="brand in productsStore.brands" 
-                  :key="brand.id" 
+                <option
+                  v-for="brand in productsStore.brands"
+                  :key="brand.id"
                   :value="brand.id"
                 >
                   {{ brand.name }}
                 </option>
               </select>
             </div>
-            
+
             <div>
               <label class="text-sm font-medium">Categoría</label>
               <select
@@ -778,9 +779,9 @@
                 class="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <option value="">Sin categoría</option>
-                <option 
-                  v-for="category in productsStore.categories" 
-                  :key="category.id" 
+                <option
+                  v-for="category in productsStore.categories"
+                  :key="category.id"
                   :value="category.id"
                 >
                   {{ category.name }}
@@ -788,7 +789,7 @@
               </select>
             </div>
           </div>
-          
+
           <div>
             <label class="text-sm font-medium">Descripción</label>
             <textarea
@@ -810,7 +811,7 @@
                 class="mt-1"
               />
             </div>
-            
+
             <div>
               <label class="text-sm font-medium">Stock Máximo</label>
               <Input
@@ -821,7 +822,7 @@
                 class="mt-1"
               />
             </div>
-            
+
             <div>
               <label class="text-sm font-medium">Punto de Reorden</label>
               <Input
@@ -861,7 +862,7 @@
               />
               <label for="edit_is_serialized" class="text-sm font-medium">Producto serializado</label>
             </div>
-            
+
             <div class="flex items-center space-x-2">
               <input
                 id="edit_is_batch_controlled"
@@ -934,6 +935,7 @@ import DialogContent from '@/components/ui/DialogContent.vue'
 import DialogHeader from '@/components/ui/DialogHeader.vue'
 import DialogTitle from '@/components/ui/DialogTitle.vue'
 import DialogFooter from '@/components/ui/DialogFooter.vue'
+import PriceDisplay from '@/components/Products/PriceDisplay.vue'
 
 const companyStore = useCompanyStore()
 const productsStore = useProductsStore()
@@ -1013,7 +1015,7 @@ const filteredProducts = computed(() => {
       const name = product.product_name || product.name || ''
       const sku = product.sku || ''
       const barcode = product.barcode || ''
-      
+
       return name.toLowerCase().includes(term) ||
              sku.toLowerCase().includes(term) ||
              barcode.toLowerCase().includes(term)
@@ -1035,24 +1037,24 @@ const filteredProducts = computed(() => {
   }
 
   if (selectedStatus.value === 'active') {
-    products = products.filter(product => 
+    products = products.filter(product =>
       product.active !== false && product.is_active !== false
     )
   } else if (selectedStatus.value === 'inactive') {
-    products = products.filter(product => 
+    products = products.filter(product =>
       product.active === false || product.is_active === false
     )
   }
 
   // Apply advanced filters
   if (appliedAdvancedFilters.value.minPrice !== null) {
-    products = products.filter(product => 
+    products = products.filter(product =>
       product.unit_price && product.unit_price >= appliedAdvancedFilters.value.minPrice!
     )
   }
 
   if (appliedAdvancedFilters.value.maxPrice !== null) {
-    products = products.filter(product => 
+    products = products.filter(product =>
       product.unit_price && product.unit_price <= appliedAdvancedFilters.value.maxPrice!
     )
   }
@@ -1072,21 +1074,21 @@ const filteredProducts = computed(() => {
   }
 
   if (appliedAdvancedFilters.value.hasDiscount === 'yes') {
-    products = products.filter(product => 
+    products = products.filter(product =>
       product.discount_value && product.discount_value > 0
     )
   } else if (appliedAdvancedFilters.value.hasDiscount === 'no') {
-    products = products.filter(product => 
+    products = products.filter(product =>
       !product.discount_value || product.discount_value === 0
     )
   }
 
   if (appliedAdvancedFilters.value.hasImage === 'yes') {
-    products = products.filter(product => 
+    products = products.filter(product =>
       product.main_image && product.main_image.trim() !== ''
     )
   } else if (appliedAdvancedFilters.value.hasImage === 'no') {
-    products = products.filter(product => 
+    products = products.filter(product =>
       !product.main_image || product.main_image.trim() === ''
     )
   }
@@ -1100,24 +1102,23 @@ const getProductTotalStock = (productId: string) => {
   return inventory.reduce((total, item) => total + item.available_qty, 0)
 }
 
+
 const formatCurrency = (amount: number, currencyCode: string) => {
-  const formatter = new Intl.NumberFormat('es-PE', {
-    style: 'currency',
-    currency: currencyCode === 'PEN' ? 'PEN' : currencyCode,
-    minimumFractionDigits: 2
-  })
-  
   if (currencyCode === 'PEN') {
     return `S/ ${amount.toFixed(2)}`
   }
-  
-  return formatter.format(amount)
+  else if (currencyCode === 'USD') {
+    return `$ ${amount.toFixed(2)}`
+  }
+  else {
+    return `${currencyCode} ${amount.toFixed(2)}`
+  }
 }
 
 // Load products with current filters
 const loadProducts = async () => {
   if (!companyStore.selectedCompany) return
-  
+
   await productsStore.fetchProductsFull(
     companyStore.selectedCompany.id,
     selectedPriceList.value || null,
@@ -1151,9 +1152,9 @@ const submitProductForm = async () => {
     } else {
       await productsStore.createProduct(productData)
     }
-    
+
     cancelProductForm()
-    
+
     // Refresh products list
     await loadProducts()
   } catch (error) {
@@ -1196,7 +1197,7 @@ const viewProduct = (product: ProductFull) => {
 const editProduct = (product: ProductFull) => {
   selectedProduct.value = product
   editingProduct.value = true
-  
+
   // Llenar el formulario con los datos del producto
   productForm.value = {
     name: product.product_name || '',
@@ -1212,7 +1213,7 @@ const editProduct = (product: ProductFull) => {
     min_stock: 20, // Se debería obtener del producto
     active: product.active !== false
   }
-  
+
   showEditProductDialog.value = true
 }
 
@@ -1226,7 +1227,7 @@ const handleImageSelection = (event: Event) => {
   if (target.files) {
     const files = Array.from(target.files)
     selectedImages.value = [...selectedImages.value, ...files]
-    
+
     // Create preview URLs
     files.forEach(file => {
       const reader = new FileReader()
@@ -1289,7 +1290,7 @@ onMounted(async () => {
     // Load products data if company is available
     if (companyStore.selectedCompany) {
       console.log('Loading products for company:', companyStore.selectedCompany.legal_name)
-      
+
       await Promise.all([
         productsStore.fetchBrands(companyStore.selectedCompany.id),
         productsStore.fetchCategories(companyStore.selectedCompany.id),
@@ -1298,15 +1299,15 @@ onMounted(async () => {
         productsStore.fetchInventoryItems(companyStore.selectedCompany.id),
         loadMeasurementUnits()
       ])
-      
+
       // Set default price list (first one found) and load products
       if (productsStore.priceLists.length > 0 && !selectedPriceList.value) {
         selectedPriceList.value = productsStore.priceLists[0].id
       }
-      
+
       // Load products with default filters
       await loadProducts()
-      
+
       console.log('Products loaded:', productsStore.productsFull.length)
       console.log('Brands loaded:', productsStore.brands.length)
       console.log('Categories loaded:', productsStore.categories.length)

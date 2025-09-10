@@ -143,6 +143,7 @@ export interface InventoryItem {
   reserved_qty: number
   available_qty: number
   average_cost: number
+  original_currency?: string
   min_stock?: number
   max_stock?: number
 }

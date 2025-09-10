@@ -876,6 +876,7 @@ CREATE TABLE IF NOT EXISTS purchase_docs (
   id uuid primary key default gen_random_uuid(),
   company_id uuid not null references companies(id) on delete cascade,
   supplier_id uuid not null references parties(id) on delete restrict,
+  purchase_order_id uuid null references purchase_orders(id),  
   doc_type varchar(2) not null references sunat.cat_01_tipo_documento(code),
   series text not null,
   number text not null,
@@ -904,6 +905,7 @@ CREATE TABLE IF NOT EXISTS purchase_docs (
   total_local numeric(18,6) null,
   total_usd numeric(18,6) null,
   total_clp numeric(18,6) null,
+  status varchar(20) NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'RECEIVED', 'COMPLETED', 'CANCELLED')),
   created_at timestamptz default now(),
   updated_at timestamptz default now(),
   deleted_at TIMESTAMPTZ,
@@ -925,6 +927,15 @@ CREATE TABLE IF NOT EXISTS purchase_doc_items (
   unit_cost_local numeric(18,6)  null,
   unit_cost_usd numeric(18,6)  null,
   unit_cost_clp numeric(18,6)  null,
+  additional_cost numeric(18,6) default 0,
+  additional_cost_local numeric(18,6)  null,
+  additional_cost_usd numeric(18,6)  null,
+  additional_cost_clp numeric(18,6)  null,
+  original_unit_cost numeric(18,6) default 0,
+  original_unit_cost_local numeric(18,6)  default 0,
+  original_unit_cost_usd numeric(18,6)  default 0,
+  original_unit_cost_clp numeric(18,6)  default 0,
+
   discount_pct numeric(18,6) default 0,
   type_price varchar(2) default '01' references sunat.cat_16_tipo_precio_unitario(code),
   igv_affectation varchar(2) default '10' references sunat.cat_07_afect_igv(code),
@@ -965,6 +976,42 @@ CREATE TABLE IF NOT EXISTS reception_items (
     notes TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- ============================================================================
+-- RECOMENDACIONES PARA MANEJO DE COSTOS ADICIONALES EN COMPRAS (FLETES Y OTROS COSTOS LOCALES)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS cat_additional_costs (
+    code VARCHAR(10) PRIMARY KEY,
+    description TEXT NOT NULL  -- Ej: 'FLETE' = Flete, 'SEGU' = Seguro, 'ARAN' = Aranceles, etc.
+);
+
+-- Ejemplos de datos iniciales (puedes insertarlos manualmente)
+-- INSERT INTO cat_additional_costs (code, description) VALUES ('FLETE', 'Flete'), ('SEGU', 'Seguro'), ('ARAN', 'Aranceles');
+
+CREATE TABLE IF NOT EXISTS purchase_additional_costs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    purchase_doc_id UUID NOT NULL REFERENCES purchase_docs(id) ON DELETE CASCADE,
+    cost_type VARCHAR(4) NOT NULL REFERENCES cat_additional_costs(code),  -- Tipo de costo
+    proration_method TEXT NOT NULL DEFAULT 'VALUE'
+        CHECK (proration_method IN ('VALUE', 'QUANTITY', 'WEIGHT')),
+    description TEXT,  -- Descripción opcional
+    amount MONETARY NOT NULL,  -- Monto del costo (dominio monetary: NUMERIC(18,6) >=0)
+    currency_code VARCHAR(3) NOT NULL REFERENCES sunat.cat_02_monedas(code) DEFAULT 'PEN',
+    exchange_rate NUMERIC(18,6) DEFAULT 1,  -- Si es moneda extranjera
+    amount_local MONETARY GENERATED ALWAYS AS (amount * exchange_rate) STORED,  -- Monto en moneda local (para prorrateo)
+    affects_inventory BOOLEAN NOT NULL DEFAULT TRUE,  -- Si afecta costo unitario (ej: flete sí, pero un cargo administrativo no)
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+-- Índices para optimización
+CREATE INDEX IF NOT EXISTS idx_purchase_additional_costs_doc ON purchase_additional_costs(purchase_doc_id);
+CREATE INDEX IF NOT EXISTS idx_purchase_additional_costs_type ON purchase_additional_costs(cost_type);
+
+CREATE TRIGGER update_purchase_additional_costs_updated_at
+    BEFORE UPDATE ON purchase_additional_costs
+    FOR EACH ROW
+    EXECUTE FUNCTION trigger_set_timestamp();
 
 -- PASO 14: DOCUMENTOS DE VENTAS
 -- ============================================================================
@@ -1394,3 +1441,277 @@ CREATE TABLE audit.changes_log (
 CREATE INDEX idx_changes_log_table_operation ON audit.changes_log(table_name, operation);
 
 -- CURRENT V_CURRENT_STOCK Y V_INVENTORY_VALUATION  NO REALIZAN EL TRIGUERS DESDE LA TABLA RECEPTION O SHIPMENT
+
+
+
+-- ============================================================================
+-- NUEVAS TABLAS PARA ÓRDENES DE DESPACHO
+-- ============================================================================
+
+-- Tabla principal para Órdenes de Despacho.
+-- Una orden de despacho agrupa múltiples documentos de venta (sales_docs) para un cliente específico,
+-- asigna vehículo y chofer, y permite la consolidación de productos y facturas.
+-- No todas las ventas requieren una orden de despacho; para ventas simples, se puede crear directamente
+-- un shipment desde sales_docs si no necesita consolidación o logística compleja.
+CREATE TABLE IF NOT EXISTS dispatch_orders (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    warehouse_id UUID NOT NULL REFERENCES warehouses(id) ON DELETE RESTRICT,  -- Almacén desde donde se despacha    
+    planned_date DATE NOT NULL DEFAULT CURRENT_DATE,                          -- Fecha planeada de despacho
+    actual_date DATE,                                                         -- Fecha real de despacho (al confirmar)
+    vehicle_id UUID REFERENCES vehicles(id) ON DELETE SET NULL,               -- Vehículo asignado
+    driver_id UUID REFERENCES drivers(id) ON DELETE SET NULL,                 -- Chofer asignado
+    status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'ASSIGNED', 'DISPATCHED', 'COMPLETED', 'CANCELLED')),  -- Estados del despacho
+    notes TEXT,                                                               -- Notas o observaciones
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    deleted_at TIMESTAMPTZ
+);
+
+-- Índices para optimización
+CREATE INDEX IF NOT EXISTS idx_dispatch_orders_company ON dispatch_orders(company_id, status);
+CREATE INDEX IF NOT EXISTS idx_dispatch_orders_warehouse ON dispatch_orders(warehouse_id);
+
+-- Trigger para actualizar timestamp
+CREATE TRIGGER update_dispatch_orders_updated_at
+    BEFORE UPDATE ON dispatch_orders
+    FOR EACH ROW
+    EXECUTE FUNCTION trigger_set_timestamp();
+
+CREATE TABLE IF NOT EXISTS dispatch_order_sales_docs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    dispatch_order_id UUID NOT NULL REFERENCES dispatch_orders(id) ON DELETE CASCADE,
+    sales_doc_id UUID NOT NULL REFERENCES sales_docs(id) ON DELETE RESTRICT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(dispatch_order_id, sales_doc_id)  -- Evita duplicados
+);
+
+-- Índices para optimización
+CREATE INDEX IF NOT EXISTS idx_dispatch_order_sales_docs_dispatch ON dispatch_order_sales_docs(dispatch_order_id);
+CREATE INDEX IF NOT EXISTS idx_dispatch_order_sales_docs_sales ON dispatch_order_sales_docs(sales_doc_id);
+
+-- ============================================================================
+-- TRIGGERS Y FUNCIONES PARA LÓGICA DE NEGOCIO
+-- ============================================================================
+
+-- Trigger para validar que un sales_doc no esté ya asignado a otra dispatch_order activa,
+-- y que no tenga un shipment existente (evita duplicados).
+CREATE OR REPLACE FUNCTION validate_sales_doc_assignment()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    -- Verificar si el sales_doc ya está asignado a otra dispatch_order no cancelada
+    IF EXISTS (
+        SELECT 1
+        FROM dispatch_order_sales_docs dosd
+        JOIN dispatch_orders odo ON odo.id = dosd.dispatch_order_id
+        WHERE dosd.sales_doc_id = NEW.sales_doc_id
+          AND dosd.dispatch_order_id != NEW.dispatch_order_id
+          AND odo.status != 'CANCELLED'
+    ) THEN
+        RAISE EXCEPTION 'El documento de venta % ya está asignado a otra orden de despacho activa',
+            NEW.sales_doc_id;
+    END IF;
+
+    -- Verificar si el sales_doc ya tiene un shipment asociado
+    IF EXISTS (
+        SELECT 1
+        FROM shipments sh
+        WHERE sh.sales_doc_id = NEW.sales_doc_id
+    ) THEN
+        RAISE EXCEPTION 'El documento de venta % ya tiene un envío (shipment) asociado',
+            NEW.sales_doc_id;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_validate_sales_doc_assignment
+    BEFORE INSERT OR UPDATE ON dispatch_order_sales_docs
+    FOR EACH ROW
+    EXECUTE FUNCTION validate_sales_doc_assignment();
+
+-- Función para generar shipments automáticamente al confirmar la dispatch_order
+-- (cuando status cambia a 'DISPATCHED').
+-- Crea un shipment por cada sales_doc asignado, copiando los items a shipment_items,
+-- y usando vehicle_id y driver_id de la dispatch_order.
+CREATE OR REPLACE FUNCTION generate_shipments_from_dispatch()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    rec RECORD;
+    v_shipment_id UUID;
+BEGIN
+    IF OLD.status != 'DISPATCHED' AND NEW.status = 'DISPATCHED' THEN
+        -- Actualizar la fecha real de despacho
+        NEW.actual_date := CURRENT_DATE;
+
+        -- Iterar sobre cada sales_doc asignado
+        FOR rec IN
+            SELECT dosd.sales_doc_id
+            FROM dispatch_order_sales_docs dosd
+            WHERE dosd.dispatch_order_id = NEW.id
+        LOOP
+            -- Crear el shipment para este sales_doc
+            INSERT INTO shipments (
+                company_id,
+                warehouse_id,
+                sales_doc_id,
+                shipment_date,
+                status,
+                vehicle_id,
+                driver_id,
+                notes,
+                created_at,
+                updated_at
+            )
+            VALUES (
+                NEW.company_id,
+                NEW.warehouse_id,
+                rec.sales_doc_id,
+                NEW.actual_date,
+                'SHIPPED',  -- Estado inicial
+                NEW.vehicle_id,
+                NEW.driver_id,
+                'Generado desde orden de despacho ' || NEW.id::TEXT,
+                NOW(),
+                NOW()
+            )
+            RETURNING id INTO v_shipment_id;
+
+            -- Copiar los items de sales_doc_items a shipment_items (consolidado por sales_doc)
+            INSERT INTO shipment_items (
+                shipment_id,
+                product_id,
+                quantity_shipped,
+                batch_number,
+                serial_number,
+                notes,
+                created_at
+            )
+            SELECT
+                v_shipment_id,
+                sdi.product_id,
+                sdi.quantity,  -- quantity_shipped = quantity de la venta (asumiendo envío completo)
+                NULL,  -- batch_number opcional, se puede enriquecer si es necesario
+                NULL,  -- serial_number opcional
+                'Item de venta ' || sdi.sales_doc_id::TEXT,
+                NOW()
+            FROM sales_doc_items sdi
+            WHERE sdi.sales_doc_id = rec.sales_doc_id;
+        END LOOP;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_generate_shipments_from_dispatch
+    BEFORE UPDATE ON dispatch_orders
+    FOR EACH ROW
+    EXECUTE FUNCTION generate_shipments_from_dispatch();
+
+-- ============================================================================
+-- VISTAS PARA CONSOLIDACIÓN Y REPORTING
+-- ============================================================================
+
+-- Vista para items consolidados por orden de despacho.
+-- Agrupa los productos de todos los sales_doc_items asignados,
+-- sumando quantities por product_id (consolidación de productos).
+CREATE OR REPLACE VIEW v_dispatch_order_items_consolidated AS
+SELECT
+    odo.id AS dispatch_order_id,
+    odo.company_id,
+    p.id AS product_id,
+    p.sku,
+    p.name AS product_name,
+    p.unit_code,
+    SUM(sdi.quantity) AS total_quantity,  -- Consolidado por productoAcross all clients
+    SUM(sdi.total_line) AS total_amount,  -- Suma de montos (opcional para reporting)
+    COUNT(DISTINCT sdi.sales_doc_id) AS num_sales_docs,  -- Número de facturas consolidadas
+    COUNT(DISTINCT sd.customer_id) AS num_customers  -- Nuevo: Número de clientes únicos
+FROM dispatch_orders odo
+JOIN dispatch_order_sales_docs dosd ON dosd.dispatch_order_id = odo.id
+JOIN sales_docs sd ON sd.id = dosd.sales_doc_id
+JOIN sales_doc_items sdi ON sdi.sales_doc_id = sd.id
+JOIN products p ON p.id = sdi.product_id
+WHERE odo.deleted_at IS NULL AND odo.status != 'CANCELLED'
+GROUP BY odo.id, odo.company_id, p.id, p.sku, p.name, p.unit_code
+ORDER BY odo.id, p.name;
+
+-- Vista para facturas consolidadas por orden de despacho y cliente.
+-- Agrupa las facturas (sales_docs) por dispatch_order, mostrando totales consolidados.
+CREATE OR REPLACE VIEW v_dispatch_order_sales_consolidated AS
+SELECT
+    odo.id AS dispatch_order_id,
+    odo.company_id,
+    COUNT(DISTINCT sd.customer_id) AS num_customers,  -- Número de clientes únicos
+    STRING_AGG(DISTINCT pt.fullname, ', ') AS customer_names,  -- Lista de nombres de clientes
+    COUNT(DISTINCT dosd.sales_doc_id) AS num_sales_docs,  -- Número de facturas consolidadas
+    SUM(sd.total) AS total_amount,                        -- Total monetario consolidado
+    STRING_AGG(sd.series || '-' || sd.number, ', ') AS sales_doc_numbers  -- Lista de facturas
+FROM dispatch_orders odo
+JOIN dispatch_order_sales_docs dosd ON dosd.dispatch_order_id = odo.id
+JOIN sales_docs sd ON sd.id = dosd.sales_doc_id
+JOIN parties pt ON pt.id = sd.customer_id  -- Join con parties usando sd.customer_id
+WHERE odo.deleted_at IS NULL AND odo.status != 'CANCELLED'
+GROUP BY odo.id, odo.company_id
+ORDER BY odo.id;
+
+-- Vista general de órdenes de despacho con resumen.
+-- Vista general de órdenes de despacho con resumen actualizado.
+-- Ahora incluye num_customers en lugar de un single customer.
+CREATE OR REPLACE VIEW v_dispatch_orders_summary AS
+SELECT
+    odo.id,
+    odo.company_id,
+    odo.warehouse_id,
+    w.name AS warehouse_name,
+    odo.planned_date,
+    odo.actual_date,
+    odo.vehicle_id,
+    v.plate AS vehicle_plate,
+    odo.driver_id,
+    d.nombre_completo AS driver_name,
+    odo.status,
+    odo.notes,
+    (SELECT COUNT(*) FROM dispatch_order_sales_docs WHERE dispatch_order_id = odo.id) AS num_sales_docs,
+    (SELECT COUNT(DISTINCT sd.customer_id) 
+     FROM dispatch_order_sales_docs dosd 
+     JOIN sales_docs sd ON sd.id = dosd.sales_doc_id 
+     WHERE dosd.dispatch_order_id = odo.id) AS num_customers,  -- Nuevo: Número de clientes
+    (SELECT SUM(total_quantity) FROM v_dispatch_order_items_consolidated WHERE dispatch_order_id = odo.id) AS total_items_quantity,
+    odo.created_at,
+    odo.updated_at
+FROM dispatch_orders odo
+JOIN warehouses w ON w.id = odo.warehouse_id
+LEFT JOIN vehicles v ON v.id = odo.vehicle_id
+LEFT JOIN drivers d ON d.id = odo.driver_id
+WHERE odo.deleted_at IS NULL;
+
+-- ============================================================================
+-- RECOMENDACIONES ACTUALIZADAS
+-- ============================================================================
+-- 1. Lógica de Flujo (Actualizada):
+--    - Crea ventas en sales_docs y sales_doc_items normalmente.
+--    - Crea dispatch_order con warehouse_id, vehicle_id, driver_id (sin customer_id fijo).
+--    - Asigna sales_docs a dispatch_order via dispatch_order_sales_docs (ahora permite múltiples clientes sin validación).
+--    - Usa vistas actualizadas: v_dispatch_order_items_consolidated (productos consolidados), 
+--      v_dispatch_order_sales_consolidated (facturas y clientes consolidados), 
+--      v_dispatch_orders_summary (resumen con conteo de clientes).
+--    - Al actualizar status a 'DISPATCHED', se generan automáticamente los shipments y shipment_items para cada sales_doc,
+--      independientemente de los clientes.
+--    - Si no necesita despacho: Crea shipment directamente desde sales_docs (sin dispatch_order).
+--
+-- 2. Integración con Stock:
+--    - Sin cambios: Los shipments activan triggers existentes para stock_ledger.
+--
+-- 3. Seguridad y RLS:
+--    - Mantén RLS basado en company_id.
+--
+-- 4. Optimizaciones:
+--    - Si las órdenes tienen muchos clientes/facturas, considera vistas materializadas para reporting pesado.
+--    - Para obtener detalles por cliente en una orden, puedes query dispatch_order_sales_docs JOIN sales_docs ON customer_id.

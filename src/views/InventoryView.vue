@@ -74,7 +74,15 @@
           <div class="flex items-center justify-between">
             <div>
               <p class="text-sm text-muted-foreground">Valor Total</p>
-              <p class="text-2xl font-bold">{{ formatCurrency(totalValue) }}</p>
+              <div class="text-2xl font-bold">
+                <span v-if="inventoryCurrency.loading.value">
+                  <Loader2 class="inline h-5 w-5 animate-spin mr-2" />
+                  Calculando...
+                </span>
+                <span v-else>
+                  {{ formatCurrency(inventoryCurrency.getTotalValue.value, companyCurrency) }}
+                </span>
+              </div>
             </div>
             <TrendingUp class="h-8 w-8 text-green-500" />
           </div>
@@ -189,10 +197,16 @@
                 <span class="font-medium text-green-600">{{ item.available_qty }}</span>
               </TableCell>
               <TableCell>
-                {{ formatCurrency(item.average_cost) }}
+                <CostDisplay 
+                  :cost="item.average_cost" 
+                  :currency="item.original_currency || 'PEN'"
+                />
               </TableCell>
               <TableCell>
-                <span class="font-medium">{{ formatCurrency(item.balance_qty * item.average_cost) }}</span>
+                <CostDisplay 
+                  :cost="item.balance_qty * item.average_cost" 
+                  :currency="item.original_currency || 'PEN'"
+                />
               </TableCell>
               <TableCell class="text-right">
                 <div class="flex items-center justify-end gap-1">
@@ -216,9 +230,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useCompanyStore } from '@/stores/company'
 import { useProductsStore } from '@/stores/products'
+import { useInventoryCurrency } from '@/composables/useInventoryCurrency'
 import {
   Download,
   Plus,
@@ -245,9 +260,14 @@ import TableHead from '@/components/ui/TableHead.vue'
 import TableBody from '@/components/ui/TableBody.vue'
 import TableCell from '@/components/ui/TableCell.vue'
 import Badge from '@/components/ui/Badge.vue'
+import CostDisplay from '@/components/inventory/CostDisplay.vue'
 
 const companyStore = useCompanyStore()
 const productsStore = useProductsStore()
+
+// Currency conversion
+const inventoryCurrency = useInventoryCurrency(productsStore.inventoryItems)
+const companyCurrency = computed(() => companyStore.selectedCompany?.currency_code || 'PEN')
 
 // Filters
 const selectedWarehouse = ref('')
@@ -301,8 +321,14 @@ const noStockCount = computed(() => {
 const inventoryItems = computed(() => filteredInventoryItems.value)
 const warehouses = computed(() => productsStore.warehouses)
 
-const formatCurrency = (amount: number) => {
-  return `S/ ${amount.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+const formatCurrency = (amount: number, currencyCode: string = 'PEN') => {
+  if (currencyCode === 'PEN') {
+    return `S/ ${amount.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  } else if (currencyCode === 'USD') {
+    return `$ ${amount.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  } else {
+    return `${currencyCode} ${amount.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  }
 }
 
 onMounted(async () => {
@@ -328,6 +354,9 @@ onMounted(async () => {
       ])
       
       console.log('Inventory items loaded:', productsStore.inventoryItems.length)
+      
+      // Convert inventory currencies after loading
+      await inventoryCurrency.convertAllItems(productsStore.inventoryItems)
     } else {
       console.warn('No company available to load inventory')
     }
@@ -335,4 +364,14 @@ onMounted(async () => {
     console.error('Error loading inventory data:', error)
   }
 })
+
+// Watch for changes in inventory items and reconvert
+watch(
+  () => productsStore.inventoryItems,
+  async (newItems) => {
+    if (newItems.length > 0) {
+      await inventoryCurrency.convertAllItems(newItems)
+    }
+  }
+)
 </script>

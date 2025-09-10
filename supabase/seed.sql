@@ -181,6 +181,8 @@ VALUES
 ('PEN','CLP', 234.000000, '2025-09-09'),
 ('CLP','PEN', 1/234.000000, '2025-09-09');
 
+INSERT INTO cat_additional_costs (code, description) VALUES ('FLETE', 'Flete'), ('SEGU', 'Seguro'), ('ARAN', 'Aranceles');
+
 -- 1. Sucursales (Lima, Ate, Callao)
 INSERT INTO public.branches (company_id, code, name, address, ubigeo_code) 
 SELECT id, '001', 'Casa Matriz', 'Av. Arequipa 123', '150101'
