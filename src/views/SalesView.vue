@@ -128,7 +128,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { useCompanyStore } from '@/stores/company'
+import { useCompaniesStore } from '@/stores/companies'
 import { useSalesStore } from '@/stores/sales'
 import {
   Download,
@@ -160,7 +160,7 @@ import ShipmentsView from '@/views/Sales/ShipmentsView.vue'
 import DispatchOrdersView from '@/views/Sales/DispatchOrdersView.vue'
 
 const router = useRouter()
-const companyStore = useCompanyStore()
+const companiesStore = useCompaniesStore()
 const salesStore = useSalesStore()
 
 // State
@@ -232,29 +232,38 @@ const createShipment = () => {
 
 // Lifecycle
 onMounted(async () => {
-  if (companyStore.selectedCompany) {
-    // Load initial data for all tabs
+  if (companiesStore.currentCompany) {
+    // First load price lists
+    await salesStore.fetchPriceLists(companiesStore.currentCompany.id)
+    
+    // Then load other data, including products with selected price list
     await Promise.all([
-      salesStore.fetchSalesOrders(companyStore.selectedCompany.id),
-      salesStore.fetchSalesDocs(companyStore.selectedCompany.id),
-      salesStore.fetchShipments(companyStore.selectedCompany.id),
-      salesStore.fetchDispatchOrders(companyStore.selectedCompany.id),
-      salesStore.fetchCustomers(companyStore.selectedCompany.id)
+      salesStore.fetchSalesOrders(companiesStore.currentCompany.id),
+      salesStore.fetchSalesDocs(companiesStore.currentCompany.id),
+      salesStore.fetchShipments(companiesStore.currentCompany.id),
+      salesStore.fetchDispatchOrders(companiesStore.currentCompany.id),
+      salesStore.fetchCustomers(companiesStore.currentCompany.id),
+      salesStore.fetchProducts(companiesStore.currentCompany.id, salesStore.selectedPriceList?.id)
     ])
   }
 })
 
 // Watchers
 watch(
-  () => companyStore.selectedCompany,
+  () => companiesStore.currentCompany,
   async (newCompany) => {
     if (newCompany) {
+      // First load price lists
+      await salesStore.fetchPriceLists(newCompany.id)
+      
+      // Then load other data, including products with selected price list
       await Promise.all([
         salesStore.fetchSalesOrders(newCompany.id),
         salesStore.fetchSalesDocs(newCompany.id),
         salesStore.fetchShipments(newCompany.id),
         salesStore.fetchDispatchOrders(newCompany.id),
-        salesStore.fetchCustomers(newCompany.id)
+        salesStore.fetchCustomers(newCompany.id),
+        salesStore.fetchProducts(newCompany.id, salesStore.selectedPriceList?.id)
       ])
     }
   }

@@ -187,6 +187,45 @@ export interface DispatchOrder {
   total_items_quantity?: number
 }
 
+export interface Warehouse {
+  id: string
+  company_id: string
+  branch_id?: string
+  code: string
+  name: string
+  width: number
+  height: number
+  length: number
+  created_at: string
+  updated_at: string
+}
+
+export interface Vehicle {
+  id: string
+  company_id: string
+  plate: string
+  brand?: string
+  model?: string
+  year?: number
+  capacity_kg?: number
+  own: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface Driver {
+  id: string
+  company_id: string
+  party_id: string
+  license_number: string
+  license_class?: string
+  valid_until?: string
+  numero_documento?: string
+  nombre_completo?: string
+  created_at: string
+  updated_at: string
+}
+
 export interface Customer {
   id: string
   company_id: string
@@ -198,6 +237,39 @@ export interface Customer {
   phone?: string
   address?: string
   is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface Product {
+  product_id: string
+  sku: string
+  barcode: string | null
+  product_name: string
+  description: string | null
+  brand_id: string
+  brand_name: string
+  category_id: string
+  category_name: string
+  unit_code: string
+  main_image: string | null
+  location: string | null
+  unit_price: number | null
+  currency_code: string | null
+  discount_value: number | null
+  total_stock: number
+  available_stock: number
+  reserved_stock: number
+  active: boolean
+  metadata: any
+}
+
+export interface PriceList {
+  id: string
+  company_id: string
+  name: string
+  currency_code: string
+  is_default: boolean
   created_at: string
   updated_at: string
 }
@@ -233,6 +305,18 @@ export const useSalesStore = defineStore('sales', {
 
     // Customers
     customers: [] as Customer[],
+
+    // Products
+    products: [] as Product[],
+
+    // Price Lists
+    priceLists: [] as PriceList[],
+    selectedPriceList: null as PriceList | null,
+
+    // Warehouses, Vehicles, Drivers
+    warehouses: [] as Warehouse[],
+    vehicles: [] as Vehicle[],
+    drivers: [] as Driver[],
     
     // SUNAT Catalogs Cache
     documentTypes: {} as Record<string, string>,
@@ -265,6 +349,34 @@ export const useSalesStore = defineStore('sales', {
     // Customers
     activeCustomers: (state) => state.customers.filter(customer => 
       customer.is_active
+    ),
+
+    // Products
+    activeProducts: (state) => state.products.filter(product => 
+      product.active
+    ),
+
+    availableProducts: (state) => state.products.filter(product => 
+      product.active && product.available_stock > 0
+    ),
+
+    // Price Lists
+    activePriceLists: (state) => state.priceLists,
+
+    defaultPriceList: (state) => state.priceLists.find(priceList => 
+      priceList.is_default
+    ) || null,
+
+    // Warehouses, Vehicles, Drivers
+    activeWarehouses: (state) => state.warehouses,
+    activeVehicles: (state) => state.vehicles,
+    activeDrivers: (state) => state.drivers,
+
+    // Available Sales Docs (not assigned to dispatch orders)
+    availableSalesDocs: (state) => state.salesDocs.filter(doc => 
+      // You would need to track which sales_docs are assigned to dispatch orders
+      // For now, return all active sales docs
+      true
     )
   },
 
@@ -457,6 +569,12 @@ export const useSalesStore = defineStore('sales', {
         // Extract items from docData
         const { items, ...salesDocData } = docData as any
         
+        // Get branch_id from localStorage
+        const selectedBranchId = localStorage.getItem('selectedBranchId')
+        if (selectedBranchId) {
+          salesDocData.branch_id = selectedBranchId
+        }
+        
         // Create the sales document first
         const { data: salesDoc, error: docError } = await supabase
           .from('sales_docs')
@@ -472,20 +590,27 @@ export const useSalesStore = defineStore('sales', {
             company_id: salesDocData.company_id,
             sales_doc_id: salesDoc.id,
             line_number: index + 1,
-            product_id: item.product_id,
-            description: item.description || null,
+            product_id: item.product_id || item.id, // Use product_id from item, fallback to id
+            description: item.description || item.product_name || null,
             unit_code: item.unit_code,
             quantity: item.quantity,
             unit_price: item.unit_price,
             unit_price_local: salesDocData.currency_code !== 'PEN' ? item.unit_price * (salesDocData.exchange_rate || 1) : item.unit_price,
+            unit_price_usd: salesDocData.currency_code === 'USD' ? item.unit_price : item.unit_price / (salesDocData.exchange_rate || 1),
+            unit_price_clp: salesDocData.currency_code === 'CLP' ? item.unit_price : 0,
             discount_pct: item.discount_pct || 0,
             discount_amount: (item.quantity * item.unit_price) * (item.discount_pct || 0) / 100,
             type_price: item.type_price || '01',
             igv_affectation: item.igv_affectation || '10',
             igv_amount: item.igv_amount || 0,
             igv_amount_local: item.igv_amount_local || 0,
+            igv_amount_usd: item.igv_amount_usd || 0,
+            igv_amount_clp: item.igv_amount_clp || 0,
+            isc_amount: item.isc_amount || 0,
             total_line: (item.quantity * item.unit_price) * (1 - (item.discount_pct || 0) / 100),
-            total_line_local: ((item.quantity * item.unit_price) * (1 - (item.discount_pct || 0) / 100)) * (salesDocData.exchange_rate || 1)
+            total_line_local: ((item.quantity * item.unit_price) * (1 - (item.discount_pct || 0) / 100)) * (salesDocData.exchange_rate || 1),
+            total_line_usd: salesDocData.currency_code === 'USD' ? (item.quantity * item.unit_price) * (1 - (item.discount_pct || 0) / 100) : 0,
+            total_line_clp: salesDocData.currency_code === 'CLP' ? (item.quantity * item.unit_price) * (1 - (item.discount_pct || 0) / 100) : 0
           }))
 
           const { error: itemsError } = await supabase
@@ -627,6 +752,35 @@ export const useSalesStore = defineStore('sales', {
       }
     },
 
+    async updateShipment(id: string, updateData: Partial<Shipment>) {
+      this.loading = true
+      this.error = null
+      try {
+        const { data: updatedShipment, error } = await supabase
+          .from('shipments')
+          .update(updateData)
+          .eq('id', id)
+          .select()
+          .single()
+
+        if (error) throw error
+        
+        // Update local state
+        const index = this.shipments.findIndex(shipment => shipment.id === id)
+        if (index !== -1 && updatedShipment) {
+          this.shipments[index] = { ...this.shipments[index], ...updatedShipment }
+        }
+        
+        return updatedShipment
+      } catch (error: any) {
+        this.error = error.message
+        console.error('Error updating shipment:', error)
+        throw error
+      } finally {
+        this.loading = false
+      }
+    },
+
     // ========================================================================
     // DISPATCH ORDERS
     // ========================================================================
@@ -652,6 +806,79 @@ export const useSalesStore = defineStore('sales', {
       } catch (error: any) {
         this.error = error.message
         console.error('Error fetching dispatch orders:', error)
+      } finally {
+        this.loading = false
+      }
+    },
+
+    // ========================================================================
+    // PRODUCTS
+    // ========================================================================
+    
+    async fetchProducts(companyId: string, priceListId?: string) {
+      this.loading = true
+      this.error = null
+      console.log('Fetching products for company:', companyId, 'with price list:', priceListId)
+      try {
+        const payload: any = { 
+          p_company_id: companyId 
+        }
+        
+        // Add price list ID if provided
+        if (priceListId) {
+          payload.p_price_list_id = priceListId
+        }
+
+        const { data, error } = await supabase
+          .rpc('list_products_full', payload)
+
+        if (error) {
+          console.error('Supabase error fetching products:', error)
+          throw error
+        }
+        
+        console.log('Products fetched:', data?.length || 0, 'records')
+        this.products = data || []
+      } catch (error: any) {
+        this.error = error.message
+        console.error('Error fetching products:', error)
+      } finally {
+        this.loading = false
+      }
+    },
+
+    // ========================================================================
+    // PRICE LISTS
+    // ========================================================================
+    
+    async fetchPriceLists(companyId: string) {
+      this.loading = true
+      this.error = null
+      console.log('Fetching price lists for company:', companyId)
+      try {
+        const { data, error } = await supabase
+          .from('price_lists')
+          .select('*')
+          .eq('company_id', companyId)
+          .order('is_default', { ascending: false })
+          .order('name', { ascending: true })
+
+        if (error) {
+          console.error('Supabase error fetching price lists:', error)
+          throw error
+        }
+        
+        console.log('Price lists fetched:', data?.length || 0, 'records')
+        this.priceLists = data || []
+        
+        // Auto-select default price list if available
+        if (!this.selectedPriceList && data && data.length > 0) {
+          const defaultPriceList = data.find(pl => pl.is_default)
+          this.selectedPriceList = defaultPriceList || data[0]
+        }
+      } catch (error: any) {
+        this.error = error.message
+        console.error('Error fetching price lists:', error)
       } finally {
         this.loading = false
       }
@@ -698,6 +925,223 @@ export const useSalesStore = defineStore('sales', {
       } catch (error: any) {
         this.error = error.message
         console.error('Error fetching customers:', error)
+      } finally {
+        this.loading = false
+      }
+    },
+
+    // ========================================================================
+    // WAREHOUSES, VEHICLES, DRIVERS
+    // ========================================================================
+    
+    async fetchWarehouses(companyId: string) {
+      this.loading = true
+      this.error = null
+      console.log('Fetching warehouses for company:', companyId)
+      try {
+        const { data, error } = await supabase
+          .from('warehouses')
+          .select('*')
+          .eq('company_id', companyId)
+          .order('name', { ascending: true })
+
+        if (error) {
+          console.error('Supabase error fetching warehouses:', error)
+          throw error
+        }
+        
+        console.log('Warehouses fetched:', data?.length || 0, 'records')
+        this.warehouses = data || []
+      } catch (error: any) {
+        this.error = error.message
+        console.error('Error fetching warehouses:', error)
+      } finally {
+        this.loading = false
+      }
+    },
+
+    async fetchVehicles(companyId: string) {
+      this.loading = true
+      this.error = null
+      console.log('Fetching vehicles for company:', companyId)
+      try {
+        const { data, error } = await supabase
+          .from('vehicles')
+          .select('*')
+          .eq('company_id', companyId)
+          .order('plate', { ascending: true })
+
+        if (error) {
+          console.error('Supabase error fetching vehicles:', error)
+          throw error
+        }
+        
+        console.log('Vehicles fetched:', data?.length || 0, 'records')
+        this.vehicles = data || []
+      } catch (error: any) {
+        this.error = error.message
+        console.error('Error fetching vehicles:', error)
+      } finally {
+        this.loading = false
+      }
+    },
+
+    async fetchDrivers(companyId: string) {
+      this.loading = true
+      this.error = null
+      console.log('Fetching drivers for company:', companyId)
+      try {
+        const { data, error } = await supabase
+          .from('drivers')
+          .select('*')
+          .eq('company_id', companyId)
+          .order('nombre_completo', { ascending: true })
+
+        if (error) {
+          console.error('Supabase error fetching drivers:', error)
+          throw error
+        }
+        
+        console.log('Drivers fetched:', data?.length || 0, 'records')
+        this.drivers = data || []
+      } catch (error: any) {
+        this.error = error.message
+        console.error('Error fetching drivers:', error)
+      } finally {
+        this.loading = false
+      }
+    },
+
+    async createDispatchOrder(dispatchOrderData: Omit<DispatchOrder, 'id' | 'created_at' | 'updated_at'>) {
+      this.loading = true
+      this.error = null
+      try {
+        // Extract sales docs from dispatchOrderData
+        const { salesDocs, ...dispatchData } = dispatchOrderData as any
+        
+        // Create the dispatch order first
+        const { data: dispatchOrder, error: dispatchError } = await supabase
+          .from('dispatch_orders')
+          .insert(dispatchData)
+          .select()
+          .single()
+
+        if (dispatchError) throw dispatchError
+        
+        // Assign sales documents to the dispatch order
+        if (salesDocs && salesDocs.length > 0 && dispatchOrder) {
+          const dispatchSalesDocs = salesDocs.map((salesDocId: string) => ({
+            dispatch_order_id: dispatchOrder.id,
+            sales_doc_id: salesDocId
+          }))
+
+          const { error: salesDocsError } = await supabase
+            .from('dispatch_order_sales_docs')
+            .insert(dispatchSalesDocs)
+
+          if (salesDocsError) throw salesDocsError
+        }
+        
+        if (dispatchOrder) {
+          this.dispatchOrders.unshift(dispatchOrder)
+        }
+        
+        return dispatchOrder
+      } catch (error: any) {
+        this.error = error.message
+        console.error('Error creating dispatch order:', error)
+        throw error
+      } finally {
+        this.loading = false
+      }
+    },
+
+    async updateDispatchOrder(id: string, updateData: Partial<DispatchOrder>) {
+      this.loading = true
+      this.error = null
+      try {
+        const { data: updatedOrder, error } = await supabase
+          .from('dispatch_orders')
+          .update(updateData)
+          .eq('id', id)
+          .select()
+          .single()
+
+        if (error) throw error
+        
+        // Update local state
+        const index = this.dispatchOrders.findIndex(order => order.id === id)
+        if (index !== -1 && updatedOrder) {
+          this.dispatchOrders[index] = { ...this.dispatchOrders[index], ...updatedOrder }
+        }
+        
+        return updatedOrder
+      } catch (error: any) {
+        this.error = error.message
+        console.error('Error updating dispatch order:', error)
+        throw error
+      } finally {
+        this.loading = false
+      }
+    },
+
+    async fetchDispatchOrderDetails(dispatchOrderId: string) {
+      this.loading = true
+      this.error = null
+      try {
+        // Get consolidated sales documents for this dispatch order
+        const { data: salesDocs, error: salesDocsError } = await supabase
+          .from('dispatch_order_sales_docs')
+          .select(`
+            sales_docs (
+              id,
+              series,
+              number,
+              issue_date,
+              total,
+              currency_code,
+              customer_id,
+              parties!customer_id (
+                id,
+                fullname,
+                doc_number,
+                doc_type
+              )
+            )
+          `)
+          .eq('dispatch_order_id', dispatchOrderId)
+
+        if (salesDocsError) throw salesDocsError
+
+        // Get consolidated items using the view
+        const { data: consolidatedItems, error: itemsError } = await supabase
+          .from('v_dispatch_order_items_consolidated')
+          .select('*')
+          .eq('dispatch_order_id', dispatchOrderId)
+
+        if (itemsError) throw itemsError
+
+        // Get consolidated customer summary
+        const { data: customerSummary, error: customerError } = await supabase
+          .from('v_dispatch_order_sales_consolidated')
+          .select('*')
+          .eq('dispatch_order_id', dispatchOrderId)
+          .single()
+
+        if (customerError) throw customerError
+
+        return {
+          salesDocs: salesDocs?.map(item => ({
+            ...item.sales_docs,
+            customer: item.sales_docs.parties
+          })) || [],
+          consolidatedItems: consolidatedItems || [],
+          customerSummary
+        }
+      } catch (error: any) {
+        this.error = error.message
+        console.error('Error fetching dispatch order details:', error)
+        throw error
       } finally {
         this.loading = false
       }
@@ -770,11 +1214,16 @@ export const useSalesStore = defineStore('sales', {
       this.selectedDispatchOrder = dispatchOrder
     },
 
+    selectPriceList(priceList: PriceList) {
+      this.selectedPriceList = priceList
+    },
+
     clearSelections() {
       this.selectedSalesOrder = null
       this.selectedSalesDoc = null
       this.selectedShipment = null
       this.selectedDispatchOrder = null
+      this.selectedPriceList = null
     },
 
     // ========================================================================

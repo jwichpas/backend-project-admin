@@ -63,6 +63,30 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/sales/orders',
+      name: 'sales-orders',
+      component: () => import('../views/Sales/SalesOrdersView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/sales/documents',
+      name: 'sales-documents',
+      component: () => import('../views/Sales/SalesDocsView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/sales/shipments',
+      name: 'sales-shipments',
+      component: () => import('../views/Sales/ShipmentsView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/sales/dispatch',
+      name: 'sales-dispatch',
+      component: () => import('../views/Sales/DispatchOrdersView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/pos',
       name: 'pos',
       component: () => import('../views/Sales/PointOfSaleView.vue'),

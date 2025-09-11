@@ -1057,7 +1057,7 @@ CREATE TABLE IF NOT EXISTS sales_docs (
   issue_date date not null,
   currency_code varchar(3) not null references sunat.cat_02_monedas(code),
   exchange_rate numeric(18,6),
-  op_type_venta varchar(2) references sunat.cat_17_tipo_operacion(code),
+  op_type_venta varchar(4) references sunat.cat_17_tipo_operacion(code),
   op_type_kardex varchar(3) references sunat.cat_12_tipo_operacion(code),
   igv_affectation varchar(2) default '10' references sunat.cat_07_afect_igv(code),
   total_ope_gravadas numeric(18,6) default 0,
@@ -1080,9 +1080,9 @@ CREATE TABLE IF NOT EXISTS sales_docs (
   total_descuentos numeric(18,6) default 0,
   total_otros_cargos numeric(18,6) default 0,
   total numeric(18,6) default 0,
-  total_local numeric(18,6) null,
-  total_usd numeric(18,6) null,
-  total_clp numeric(18,6) null,
+  total_local numeric(18,6) default 0,
+  total_usd numeric(18,6) default 0,
+  total_clp numeric(18,6) default 0,
   notes text,
   greenter_xml bytea,
   greenter_cdr bytea,
@@ -1167,7 +1167,7 @@ CREATE TABLE public.document_series (
     company_id UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
     document_type_code VARCHAR(4) NOT NULL references sunat.cat_01_tipo_documento(code) ON DELETE CASCADE, -- Ej: 01 = Factura, 03 = Boleta
     series VARCHAR(4) NOT NULL, -- Ej: F001, B001
-    warehouse_id UUID REFERENCES public.warehouses(id) ON DELETE SET NULL,
+    branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL,
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
@@ -1573,7 +1573,7 @@ BEGIN
                 NEW.warehouse_id,
                 rec.sales_doc_id,
                 NEW.actual_date,
-                'SHIPPED',  -- Estado inicial
+                'COMPLETE',  -- Estado inicial
                 NEW.vehicle_id,
                 NEW.driver_id,
                 'Generado desde orden de despacho ' || NEW.id::TEXT,

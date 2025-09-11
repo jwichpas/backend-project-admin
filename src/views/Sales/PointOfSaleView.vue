@@ -9,10 +9,27 @@
             <h1 class="text-xl font-bold">Punto de Venta</h1>
           </div>
           <Badge variant="outline" class="text-xs">
-            {{ companyStore.selectedCompany?.legal_name }}
+            {{ companiesStore.currentCompany?.legal_name }}
           </Badge>
         </div>
         <div class="flex items-center gap-3">
+          <!-- Price List Selector -->
+          <div v-if="salesStore.activePriceLists.length > 0" class="min-w-[180px]">
+            <p class="text-xs text-muted-foreground mb-1">Lista de Precios</p>
+            <select
+              :value="salesStore.selectedPriceList?.id"
+              @change="onPriceListChange"
+              class="w-full px-2 py-1 text-xs border border-input rounded-md bg-background"
+            >
+              <option
+                v-for="priceList in salesStore.activePriceLists"
+                :key="priceList.id"
+                :value="priceList.id"
+              >
+                {{ priceList.name }}
+              </option>
+            </select>
+          </div>
           <div class="text-right">
             <p class="text-sm text-muted-foreground">Vendedor</p>
             <p class="font-medium">{{ currentUser?.name || 'Usuario' }}</p>
@@ -75,22 +92,30 @@
           <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
             <div
               v-for="product in filteredProducts"
-              :key="product.id"
+              :key="product.product_id"
               class="bg-card border border-border rounded-lg p-3 cursor-pointer hover:shadow-md transition-all duration-200 hover:border-primary"
               @click="addToCart(product)"
             >
-              <div class="aspect-square bg-muted rounded-md mb-2 flex items-center justify-center">
-                <Package class="h-8 w-8 text-muted-foreground" />
+              <div class="aspect-square bg-muted rounded-md mb-2 flex items-center justify-center overflow-hidden">
+                <template v-if="product.main_image && !isImageError(product.product_id)">
+                  <img 
+                    :src="product.main_image" 
+                    :alt="product.product_name"
+                    class="w-full h-full object-cover"
+                    @error="() => handleImageError(product.product_id)"
+                  />
+                </template>
+                <Package v-else class="h-8 w-8 text-muted-foreground" />
               </div>
               <div class="space-y-1">
-                <h3 class="font-medium text-sm line-clamp-2">{{ product.name }}</h3>
+                <h3 class="font-medium text-sm line-clamp-2">{{ product.product_name }}</h3>
                 <p class="text-xs text-muted-foreground">{{ product.sku }}</p>
                 <div class="flex items-center justify-between">
                   <p class="font-bold text-primary">
-                    {{ formatCurrency(product.unit_price) }}
+                    {{ formatCurrency(product.unit_price || 0) }}
                   </p>
                   <Badge variant="outline" class="text-xs">
-                    Stock: {{ product.stock || 0 }}
+                    Stock: {{ product.available_stock || 0 }}
                   </Badge>
                 </div>
               </div>
@@ -157,9 +182,24 @@
                 class="bg-background border border-border rounded-lg p-3"
               >
                 <div class="flex items-start justify-between mb-2">
-                  <div class="flex-1">
-                    <h4 class="font-medium text-sm">{{ item.product.name }}</h4>
-                    <p class="text-xs text-muted-foreground">{{ item.product.sku }}</p>
+                  <div class="flex items-start gap-3 flex-1">
+                    <!-- Product thumbnail -->
+                    <div class="w-10 h-10 bg-muted rounded-md flex items-center justify-center overflow-hidden flex-shrink-0">
+                      <template v-if="item.product.main_image && !isImageError(item.product.product_id)">
+                        <img 
+                          :src="item.product.main_image" 
+                          :alt="item.product.product_name"
+                          class="w-full h-full object-cover"
+                          @error="() => handleImageError(item.product.product_id)"
+                        />
+                      </template>
+                      <Package v-else class="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    <!-- Product info -->
+                    <div class="flex-1">
+                      <h4 class="font-medium text-sm">{{ item.product.product_name }}</h4>
+                      <p class="text-xs text-muted-foreground">{{ item.product.sku }}</p>
+                    </div>
                   </div>
                   <Button
                     variant="ghost"
@@ -306,9 +346,9 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useCompanyStore } from '@/stores/company'
+import { useCompaniesStore } from '@/stores/companies'
 import { useSalesStore } from '@/stores/sales'
-import { useProductsStore } from '@/stores/products'
+// Removed: import { useProductsStore } from '@/stores/products' - using salesStore instead
 import {
   CreditCard,
   Settings,
@@ -332,9 +372,9 @@ import DialogContent from '@/components/ui/DialogContent.vue'
 import DialogHeader from '@/components/ui/DialogHeader.vue'
 import DialogTitle from '@/components/ui/DialogTitle.vue'
 
-const companyStore = useCompanyStore()
+const companiesStore = useCompaniesStore()
 const salesStore = useSalesStore()
-const productsStore = useProductsStore()
+// Removed productsStore - using salesStore for products
 
 // State
 const productSearch = ref('')
@@ -345,6 +385,7 @@ const processing = ref(false)
 const showSettingsDialog = ref(false)
 const showProductDialog = ref(false)
 const showCustomerDialog = ref(false)
+const failedImages = ref(new Set<string>())
 
 // Cart
 const cartItems = ref<Array<{
@@ -367,11 +408,28 @@ const currentUser = ref({
 })
 
 // Computed
-const categories = computed(() => productsStore.activeCategories || [])
+// Get unique categories from products
+const categories = computed(() => {
+  const uniqueCategories = new Set()
+  const categoriesWithNames: Array<{id: string, name: string}> = []
+  
+  salesStore.activeProducts.forEach(product => {
+    if (!uniqueCategories.has(product.category_id)) {
+      uniqueCategories.add(product.category_id)
+      categoriesWithNames.push({
+        id: product.category_id,
+        name: product.category_name
+      })
+    }
+  })
+  
+  return categoriesWithNames
+})
+
 const customers = computed(() => salesStore.activeCustomers || [])
 
 const filteredProducts = computed(() => {
-  let products = productsStore.activeProducts || []
+  let products = salesStore.availableProducts || []
   
   // Filter by category
   if (selectedCategory.value) {
@@ -382,16 +440,13 @@ const filteredProducts = computed(() => {
   if (productSearch.value) {
     const search = productSearch.value.toLowerCase()
     products = products.filter(p => 
-      p.name.toLowerCase().includes(search) ||
-      p.sku.toLowerCase().includes(search)
+      p.product_name.toLowerCase().includes(search) ||
+      p.sku.toLowerCase().includes(search) ||
+      (p.barcode && p.barcode.toLowerCase().includes(search))
     )
   }
   
-  return products.map(p => ({
-    ...p,
-    unit_price: 10.00, // Mock price
-    stock: Math.floor(Math.random() * 100) // Mock stock
-  }))
+  return products
 })
 
 const cartSubtotal = computed(() => {
@@ -411,8 +466,24 @@ const searchProducts = () => {
   // Search is handled by computed property
 }
 
+const onPriceListChange = async (event: Event) => {
+  const target = event.target as HTMLSelectElement
+  const priceListId = target.value
+  
+  if (priceListId && companiesStore.currentCompany) {
+    // Find and select the price list
+    const priceList = salesStore.activePriceLists.find(pl => pl.id === priceListId)
+    if (priceList) {
+      salesStore.selectPriceList(priceList)
+      
+      // Reload products with the new price list
+      await salesStore.fetchProducts(companiesStore.currentCompany.id, priceListId)
+    }
+  }
+}
+
 const addToCart = (product: any) => {
-  const existingIndex = cartItems.value.findIndex(item => item.product.id === product.id)
+  const existingIndex = cartItems.value.findIndex(item => item.product.product_id === product.product_id)
   
   if (existingIndex >= 0) {
     updateQuantity(existingIndex, cartItems.value[existingIndex].quantity + 1)
@@ -420,8 +491,8 @@ const addToCart = (product: any) => {
     cartItems.value.push({
       product,
       quantity: 1,
-      unit_price: product.unit_price,
-      total: product.unit_price
+      unit_price: product.unit_price || 0,
+      total: product.unit_price || 0
     })
   }
 }
@@ -455,7 +526,7 @@ const processPayment = async () => {
   try {
     // Create sales document
     const salesDocData = {
-      company_id: companyStore.selectedCompany?.id,
+      company_id: companiesStore.currentCompany?.id,
       customer_id: selectedCustomer.value || null,
       doc_type: documentType.value,
       series: documentType.value === '01' ? posSettings.value.facturaSeries : posSettings.value.boletaSeries,
@@ -471,8 +542,8 @@ const processPayment = async () => {
       total_local: cartTotal.value,
       igv_affectation: '10',
       items: cartItems.value.map(item => ({
-        product_id: item.product.id,
-        description: item.product.name,
+        product_id: item.product.product_id,
+        description: item.product.product_name,
         unit_code: item.product.unit_code || 'NIU',
         quantity: item.quantity,
         unit_price: item.unit_price,
@@ -507,13 +578,24 @@ const formatCurrency = (amount: number) => {
   return `S/ ${amount.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
+const handleImageError = (productId: string) => {
+  failedImages.value.add(productId)
+}
+
+const isImageError = (productId: string) => {
+  return failedImages.value.has(productId)
+}
+
 // Lifecycle
 onMounted(async () => {
-  if (companyStore.selectedCompany) {
+  if (companiesStore.currentCompany) {
+    // First load price lists
+    await salesStore.fetchPriceLists(companiesStore.currentCompany.id)
+    
+    // Then load products with selected price list and customers
     await Promise.all([
-      productsStore.fetchProducts(companyStore.selectedCompany.id),
-      productsStore.fetchCategories(companyStore.selectedCompany.id),
-      salesStore.fetchCustomers(companyStore.selectedCompany.id)
+      salesStore.fetchProducts(companiesStore.currentCompany.id, salesStore.selectedPriceList?.id),
+      salesStore.fetchCustomers(companiesStore.currentCompany.id)
     ])
   }
 })

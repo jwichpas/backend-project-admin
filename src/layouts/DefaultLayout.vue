@@ -34,10 +34,60 @@
             </router-link>
           </li>
           <li>
-            <router-link to="/sales" class="group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors" :class="getNavClass('/sales')">
-              <Receipt class="mr-3 h-5 w-5 transition-colors" :class="getIconClass('/sales')" />
-              <span v-if="!isCollapsed">Gestión de Ventas</span>
-            </router-link>
+            <div class="relative">
+              <button
+                @click="toggleSalesMenu"
+                class="group flex items-center w-full rounded-md px-3 py-2 text-sm font-medium transition-colors"
+                :class="getNavClass('/sales')"
+              >
+                <Receipt class="mr-3 h-5 w-5 transition-colors" :class="getIconClass('/sales')" />
+                <span v-if="!isCollapsed" class="flex-1 text-left">Gestión de Ventas</span>
+                <ChevronDown
+                  v-if="!isCollapsed"
+                  class="h-4 w-4 transition-transform"
+                  :class="{ 'rotate-180': salesMenuOpen }"
+                />
+              </button>
+
+              <!-- Sales Submenu -->
+              <div v-if="salesMenuOpen && !isCollapsed" class="mt-1 space-y-1 pl-6">
+                <router-link
+                  to="/sales"
+                  class="block rounded-md px-3 py-2 text-sm transition-colors"
+                  :class="getSubmenuClass('/sales')"
+                >
+                  Dashboard de Ventas
+                </router-link>
+                <router-link
+                  to="/sales/orders"
+                  class="block rounded-md px-3 py-2 text-sm transition-colors"
+                  :class="getSubmenuClass('/sales/orders')"
+                >
+                  Órdenes de Venta
+                </router-link>
+                <router-link
+                  to="/sales/documents"
+                  class="block rounded-md px-3 py-2 text-sm transition-colors"
+                  :class="getSubmenuClass('/sales/documents')"
+                >
+                  Documentos de Venta
+                </router-link>
+                <router-link
+                  to="/sales/shipments"
+                  class="block rounded-md px-3 py-2 text-sm transition-colors"
+                  :class="getSubmenuClass('/sales/shipments')"
+                >
+                  Envíos
+                </router-link>
+                <router-link
+                  to="/sales/dispatch"
+                  class="block rounded-md px-3 py-2 text-sm transition-colors"
+                  :class="getSubmenuClass('/sales/dispatch')"
+                >
+                  Órdenes de Despacho
+                </router-link>
+              </div>
+            </div>
           </li>
           <li>
             <router-link to="/customers" class="group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors" :class="getNavClass('/customers')">
@@ -433,6 +483,7 @@ const authStore = useAuthStore()
 const isCollapsed = ref(false)
 const userMenuOpen = ref(false)
 const productsMenuOpen = ref(false)
+const salesMenuOpen = ref(false)
 const purchasesMenuOpen = ref(false)
 const notificationsOpen = ref(false)
 const exchangeRates = ref<ExchangeRate[]>([])
@@ -440,6 +491,7 @@ const notifications = ref<Notification[]>([])
 
 const toggleCollapse = () => { isCollapsed.value = !isCollapsed.value }
 const toggleProductsMenu = () => { productsMenuOpen.value = !productsMenuOpen.value }
+const toggleSalesMenu = () => { salesMenuOpen.value = !salesMenuOpen.value }
 const togglePurchasesMenu = () => { purchasesMenuOpen.value = !purchasesMenuOpen.value }
 const toggleNotifications = () => { notificationsOpen.value = !notificationsOpen.value }
 
@@ -516,6 +568,10 @@ const getPageTitle = () => {
     'products-price-lists': 'Listas de Precios',
     'products-locations': 'Ubicaciones',
     'sales': 'Ventas',
+    'sales-orders': 'Órdenes de Venta',
+    'sales-documents': 'Documentos de Venta',
+    'sales-shipments': 'Envíos',
+    'sales-dispatch': 'Órdenes de Despacho',
     'purchases': 'Compras',
     'purchases-orders': 'Órdenes de Compra',
     'purchases-docs': 'Documentos de Compra', 
