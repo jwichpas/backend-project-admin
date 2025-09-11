@@ -181,6 +181,122 @@
         </div>
       </DialogContent>
     </Dialog>
+
+    <!-- View Order Details Dialog -->
+    <Dialog v-model:open="showViewOrderDialog">
+      <DialogContent class="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogHeader class="flex-shrink-0">
+          <DialogTitle>Detalles de la Orden de Venta</DialogTitle>
+        </DialogHeader>
+        <div v-if="selectedOrder" class="flex-1 overflow-y-auto space-y-6">
+          <!-- Order Header -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="space-y-3">
+              <div>
+                <label class="text-sm font-medium text-muted-foreground">Número de Orden</label>
+                <p class="text-lg font-semibold">#{{ selectedOrder.id.slice(-8).toUpperCase() }}</p>
+              </div>
+              <div>
+                <label class="text-sm font-medium text-muted-foreground">Cliente</label>
+                <p class="text-base">{{ selectedOrder.customer_name || 'Cliente no especificado' }}</p>
+              </div>
+              <div>
+                <label class="text-sm font-medium text-muted-foreground">Fecha de Orden</label>
+                <p class="text-base">{{ formatDate(selectedOrder.order_date) }}</p>
+              </div>
+            </div>
+            <div class="space-y-3">
+              <div>
+                <label class="text-sm font-medium text-muted-foreground">Estado</label>
+                <div class="mt-1">
+                  <Badge :variant="getStatusVariant(selectedOrder.status)">
+                    {{ getStatusText(selectedOrder.status) }}
+                  </Badge>
+                </div>
+              </div>
+              <div>
+                <label class="text-sm font-medium text-muted-foreground">Moneda</label>
+                <p class="text-base">{{ selectedOrder.currency_code }}</p>
+              </div>
+              <div>
+                <label class="text-sm font-medium text-muted-foreground">Total</label>
+                <p class="text-lg font-semibold text-primary">
+                  {{ formatCurrency(selectedOrder.total_amount, selectedOrder.currency_code) }}
+                </p>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Order Items -->
+          <div v-if="selectedOrder.items && selectedOrder.items.length > 0">
+            <h3 class="text-lg font-semibold mb-3">Productos</h3>
+            <div class="border rounded-lg overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Producto</TableHead>
+                    <TableHead class="text-right">Cantidad</TableHead>
+                    <TableHead class="text-right">Precio Unitario</TableHead>
+                    <TableHead class="text-right">Total</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow v-for="item in selectedOrder.items" :key="item.id">
+                    <TableCell>
+                      <div>
+                        <p class="font-medium">{{ item.product_name || 'Producto sin nombre' }}</p>
+                        <p class="text-sm text-muted-foreground">{{ item.description || '' }}</p>
+                      </div>
+                    </TableCell>
+                    <TableCell class="text-right">{{ item.quantity }}</TableCell>
+                    <TableCell class="text-right">
+                      {{ formatCurrency(item.unit_price, selectedOrder.currency_code) }}
+                    </TableCell>
+                    <TableCell class="text-right font-medium">
+                      {{ formatCurrency(item.total_line, selectedOrder.currency_code) }}
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+
+          <!-- Notes -->
+          <div v-if="selectedOrder.notes">
+            <h3 class="text-lg font-semibold mb-3">Notas</h3>
+            <div class="bg-muted p-4 rounded-lg">
+              <p class="text-sm">{{ selectedOrder.notes }}</p>
+            </div>
+          </div>
+        </div>
+        <div class="flex justify-end gap-2 mt-6 pt-4 border-t">
+          <Button variant="outline" @click="showViewOrderDialog = false">
+            Cerrar
+          </Button>
+          <Button v-if="selectedOrder && selectedOrder.status !== 'SHIPPED'" @click="editSelectedOrder">
+            <Edit class="mr-2 h-4 w-4" />
+            Editar Orden
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Edit Order Dialog -->
+    <Dialog v-model:open="showEditOrderDialog">
+      <DialogContent class="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogHeader class="flex-shrink-0">
+          <DialogTitle>Editar Orden de Venta</DialogTitle>
+        </DialogHeader>
+        <div class="flex-1 overflow-y-auto pr-2 -mr-2">
+          <SalesOrderForm 
+            v-if="selectedOrder"
+            :initialOrder="selectedOrder"
+            @save="handleUpdateOrder" 
+            @cancel="showEditOrderDialog = false" 
+          />
+        </div>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
 
@@ -229,6 +345,9 @@ const salesStore = useSalesStore()
 
 // State
 const showCreateOrderDialog = ref(false)
+const showViewOrderDialog = ref(false)
+const showEditOrderDialog = ref(false)
+const selectedOrder = ref(null)
 
 // Computed
 const filteredOrders = computed(() => salesStore.activeSalesOrders)
@@ -294,16 +413,36 @@ const getStatusText = (status: string) => {
   return statusMap[status] || status
 }
 
-const viewOrder = (order: any) => {
+const viewOrder = async (order: any) => {
+  selectedOrder.value = order
   salesStore.selectSalesOrder(order)
-  // TODO: Show order details dialog
-  console.log('View order:', order)
+  
+  // Fetch order details with items if not already loaded
+  if (!order.items || order.items.length === 0) {
+    try {
+      await salesStore.fetchSalesOrderItems(order.id)
+      // Update selectedOrder with the fetched details
+      const updatedOrder = salesStore.salesOrders.find(o => o.id === order.id)
+      if (updatedOrder) {
+        selectedOrder.value = updatedOrder
+      }
+    } catch (error) {
+      console.error('Error fetching order items:', error)
+    }
+  }
+  
+  showViewOrderDialog.value = true
 }
 
 const editOrder = (order: any) => {
+  selectedOrder.value = order
   salesStore.selectSalesOrder(order)
-  // TODO: Open edit dialog
-  console.log('Edit order:', order)
+  showEditOrderDialog.value = true
+}
+
+const editSelectedOrder = () => {
+  showViewOrderDialog.value = false
+  showEditOrderDialog.value = true
 }
 
 const showOrderActions = (order: any) => {
@@ -325,6 +464,12 @@ const refreshData = async () => {
 const handleSaveOrder = (orderData: any) => {
   showCreateOrderDialog.value = false
   refreshData() // Refresh the list to show the new order
+}
+
+const handleUpdateOrder = (orderData: any) => {
+  showEditOrderDialog.value = false
+  selectedOrder.value = null
+  refreshData() // Refresh the list to show the updated order
 }
 
 // Lifecycle

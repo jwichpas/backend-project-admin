@@ -496,6 +496,65 @@ export const useSalesStore = defineStore('sales', {
       }
     },
 
+    async updateSalesOrder(id: string, updateData: Partial<SalesOrder>) {
+      this.loading = true
+      this.error = null
+      try {
+        // Extract items from updateData
+        const { items, ...salesOrderData } = updateData as any
+        
+        // Update the sales order first
+        const { data: updatedOrder, error: orderError } = await supabase
+          .from('sales_orders')
+          .update(salesOrderData)
+          .eq('id', id)
+          .select()
+          .single()
+
+        if (orderError) throw orderError
+        
+        // Update sales order items if provided
+        if (items && items.length > 0) {
+          // Delete existing items
+          const { error: deleteError } = await supabase
+            .from('sales_order_items')
+            .delete()
+            .eq('sales_order_id', id)
+
+          if (deleteError) throw deleteError
+
+          // Insert new items
+          const orderItems = items.map((item: any) => ({
+            sales_order_id: id,
+            product_id: item.product_id,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            discount_pct: item.discount_pct || 0
+          }))
+
+          const { error: itemsError } = await supabase
+            .from('sales_order_items')
+            .insert(orderItems)
+
+          if (itemsError) throw itemsError
+        }
+        
+        // Update local state
+        const index = this.salesOrders.findIndex(order => order.id === id)
+        if (index !== -1 && updatedOrder) {
+          this.salesOrders[index] = { ...this.salesOrders[index], ...updatedOrder }
+        }
+        
+        return updatedOrder
+      } catch (error: any) {
+        this.error = error.message
+        console.error('Error updating sales order:', error)
+        throw error
+      } finally {
+        this.loading = false
+      }
+    },
+
     // ========================================================================
     // SALES DOCUMENTS
     // ========================================================================

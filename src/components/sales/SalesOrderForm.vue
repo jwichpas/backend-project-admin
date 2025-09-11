@@ -3,9 +3,11 @@
     <div class="flex-shrink-0">
       <!-- Header -->
       <div class="mb-6">
-        <h3 class="text-lg font-semibold">Nueva Orden de Venta</h3>
+        <h3 class="text-lg font-semibold">
+          {{ props.initialOrder ? 'Editar Orden de Venta' : 'Nueva Orden de Venta' }}
+        </h3>
         <p class="text-muted-foreground text-sm mt-1">
-          Crea una orden de venta para gestionar las solicitudes de productos
+          {{ props.initialOrder ? 'Modifica los detalles de la orden de venta' : 'Crea una orden de venta para gestionar las solicitudes de productos' }}
         </p>
       </div>
     </div>
@@ -261,10 +263,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useCompanyStore } from '@/stores/company'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useCompaniesStore } from '@/stores/companies'
 import { useSalesStore, type SalesOrder } from '@/stores/sales'
 import { useProductsStore } from '@/stores/products'
+
+// Props
+interface Props {
+  initialOrder?: any
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  initialOrder: null
+})
 import {
   User,
   ShoppingCart,
@@ -288,7 +299,7 @@ const emit = defineEmits<{
   cancel: []
 }>()
 
-const companyStore = useCompanyStore()
+const companiesStore = useCompaniesStore()
 const salesStore = useSalesStore()
 const productsStore = useProductsStore()
 
@@ -391,25 +402,56 @@ const formatCurrency = (amount: number) => {
   return `${symbol} ${amount.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
+// Initialize form with existing order data
+const initializeForm = () => {
+  if (props.initialOrder) {
+    form.value = {
+      company_id: props.initialOrder.company_id,
+      customer_id: props.initialOrder.customer_id,
+      order_date: props.initialOrder.order_date,
+      expected_delivery_date: props.initialOrder.expected_delivery_date || '',
+      currency_code: props.initialOrder.currency_code,
+      exchange_rate: props.initialOrder.exchange_rate,
+      status: props.initialOrder.status,
+      notes: props.initialOrder.notes || '',
+      items: props.initialOrder.items?.map((item: any) => ({
+        product_id: item.product_id,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        discount_pct: item.discount_pct || 0,
+        total_line: item.total_line,
+        product_name: item.product_name
+      })) || []
+    }
+  }
+}
+
 const handleSave = async () => {
-  if (!isFormValid.value || !companyStore.selectedCompany) return
+  if (!isFormValid.value || !companiesStore.currentCompany) return
   
   loading.value = true
   
   try {
     const orderData = {
       ...form.value,
-      company_id: companyStore.selectedCompany.id,
+      company_id: companiesStore.currentCompany.id,
       total_amount: orderTotal.value
     }
     
-    const result = await salesStore.createSalesOrder(orderData)
+    let result
+    if (props.initialOrder) {
+      // Update existing order
+      result = await salesStore.updateSalesOrder(props.initialOrder.id, orderData)
+    } else {
+      // Create new order
+      result = await salesStore.createSalesOrder(orderData)
+    }
     
     if (result) {
       emit('save', result)
     }
   } catch (error) {
-    console.error('Error creating sales order:', error)
+    console.error('Error saving sales order:', error)
   } finally {
     loading.value = false
   }
@@ -417,14 +459,22 @@ const handleSave = async () => {
 
 // Lifecycle
 onMounted(async () => {
-  if (companyStore.selectedCompany) {
-    form.value.company_id = companyStore.selectedCompany.id
+  if (companiesStore.currentCompany) {
+    form.value.company_id = companiesStore.currentCompany.id
     
     // Load necessary data
     await Promise.all([
-      productsStore.fetchProducts(companyStore.selectedCompany.id),
-      salesStore.fetchCustomers(companyStore.selectedCompany.id)
+      productsStore.fetchProducts(companiesStore.currentCompany.id),
+      salesStore.fetchCustomers(companiesStore.currentCompany.id)
     ])
   }
+  
+  // Initialize form with initial order data if provided
+  initializeForm()
 })
+
+// Watch for changes in initialOrder prop
+watch(() => props.initialOrder, () => {
+  initializeForm()
+}, { deep: true })
 </script>
