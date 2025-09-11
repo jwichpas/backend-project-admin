@@ -1192,6 +1192,18 @@ const dispatchOrder = async (order: any) => {
 
 // Lifecycle
 onMounted(async () => {
+  // Initialize companies if not already loaded
+  if (!companiesStore.currentCompany && companiesStore.userCompanies.length === 0) {
+    try {
+      const userId = localStorage.getItem('userId')
+      if (userId) {
+        await companiesStore.fetchUserCompanies(userId)
+      }
+    } catch (error) {
+      console.error('Error fetching user companies:', error)
+    }
+  }
+  
   if (companiesStore.currentCompany) {
     await Promise.all([
       salesStore.fetchDispatchOrders(companiesStore.currentCompany.id),

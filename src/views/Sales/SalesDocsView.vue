@@ -209,7 +209,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { useCompanyStore } from '@/stores/company'
+import { useCompaniesStore } from '@/stores/companies'
 import { useSalesStore } from '@/stores/sales'
 import {
   Download,
@@ -242,7 +242,7 @@ import DialogContent from '@/components/ui/DialogContent.vue'
 import DialogHeader from '@/components/ui/DialogHeader.vue'
 import DialogTitle from '@/components/ui/DialogTitle.vue'
 
-const companyStore = useCompanyStore()
+const companiesStore = useCompaniesStore()
 const salesStore = useSalesStore()
 
 // State
@@ -347,21 +347,33 @@ const exportDocs = () => {
 }
 
 const refreshData = async () => {
-  if (companyStore.selectedCompany) {
-    await salesStore.fetchSalesDocs(companyStore.selectedCompany.id)
+  if (companiesStore.currentCompany) {
+    await salesStore.fetchSalesDocs(companiesStore.currentCompany.id)
   }
 }
 
 // Lifecycle
 onMounted(async () => {
-  if (companyStore.selectedCompany) {
+  // Initialize companies if not already loaded
+  if (!companiesStore.currentCompany && companiesStore.userCompanies.length === 0) {
+    try {
+      const userId = localStorage.getItem('userId')
+      if (userId) {
+        await companiesStore.fetchUserCompanies(userId)
+      }
+    } catch (error) {
+      console.error('Error fetching user companies:', error)
+    }
+  }
+  
+  if (companiesStore.currentCompany) {
     await refreshData()
   }
 })
 
 // Watchers
 watch(
-  () => companyStore.selectedCompany,
+  () => companiesStore.currentCompany,
   async (newCompany) => {
     if (newCompany) {
       await refreshData()
