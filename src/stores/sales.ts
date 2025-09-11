@@ -586,32 +586,57 @@ export const useSalesStore = defineStore('sales', {
         
         // Create sales document items if they exist
         if (items && items.length > 0 && salesDoc) {
-          const docItems = items.map((item: any, index: number) => ({
-            company_id: salesDocData.company_id,
-            sales_doc_id: salesDoc.id,
-            line_number: index + 1,
-            product_id: item.product_id || item.id, // Use product_id from item, fallback to id
-            description: item.description || item.product_name || null,
-            unit_code: item.unit_code,
-            quantity: item.quantity,
-            unit_price: item.unit_price,
-            unit_price_local: salesDocData.currency_code !== 'PEN' ? item.unit_price * (salesDocData.exchange_rate || 1) : item.unit_price,
-            unit_price_usd: salesDocData.currency_code === 'USD' ? item.unit_price : item.unit_price / (salesDocData.exchange_rate || 1),
-            unit_price_clp: salesDocData.currency_code === 'CLP' ? item.unit_price : 0,
-            discount_pct: item.discount_pct || 0,
-            discount_amount: (item.quantity * item.unit_price) * (item.discount_pct || 0) / 100,
-            type_price: item.type_price || '01',
-            igv_affectation: item.igv_affectation || '10',
-            igv_amount: item.igv_amount || 0,
-            igv_amount_local: item.igv_amount_local || 0,
-            igv_amount_usd: item.igv_amount_usd || 0,
-            igv_amount_clp: item.igv_amount_clp || 0,
-            isc_amount: item.isc_amount || 0,
-            total_line: (item.quantity * item.unit_price) * (1 - (item.discount_pct || 0) / 100),
-            total_line_local: ((item.quantity * item.unit_price) * (1 - (item.discount_pct || 0) / 100)) * (salesDocData.exchange_rate || 1),
-            total_line_usd: salesDocData.currency_code === 'USD' ? (item.quantity * item.unit_price) * (1 - (item.discount_pct || 0) / 100) : 0,
-            total_line_clp: salesDocData.currency_code === 'CLP' ? (item.quantity * item.unit_price) * (1 - (item.discount_pct || 0) / 100) : 0
-          }))
+          const docItems = items.map((item: any, index: number) => {
+            const exchangeRate = salesDocData.exchange_rate || 1
+            const unitPrice = Number(item.unit_price) || 0
+            const quantity = Number(item.quantity) || 0
+            const discountPct = Number(item.discount_pct) || 0
+            
+            // Helper function to round to 6 decimal places to avoid precision issues
+            const roundTo6 = (value: number): number => Math.round(value * 1000000) / 1000000
+            
+            // Calculate base values
+            const unitPriceLocal = salesDocData.currency_code !== 'PEN' 
+              ? roundTo6(unitPrice * exchangeRate) 
+              : unitPrice
+            
+            const unitPriceUsd = salesDocData.currency_code === 'USD' 
+              ? unitPrice 
+              : roundTo6(unitPrice / exchangeRate)
+            
+            const unitPriceClp = salesDocData.currency_code === 'CLP' ? unitPrice : 0
+            
+            const discountAmount = roundTo6((quantity * unitPrice) * discountPct / 100)
+            const totalLine = roundTo6((quantity * unitPrice) * (1 - discountPct / 100))
+            const totalLineLocal = roundTo6(totalLine * exchangeRate)
+            
+            return {
+              company_id: salesDocData.company_id,
+              sales_doc_id: salesDoc.id,
+              line_number: index + 1,
+              product_id: item.product_id || item.id,
+              description: item.description || item.product_name || null,
+              unit_code: item.unit_code,
+              quantity: quantity,
+              unit_price: unitPrice,
+              unit_price_local: unitPriceLocal,
+              unit_price_usd: unitPriceUsd,
+              unit_price_clp: unitPriceClp,
+              discount_pct: discountPct,
+              discount_amount: discountAmount,
+              type_price: item.type_price || '01',
+              igv_affectation: item.igv_affectation || '10',
+              igv_amount: Number(item.igv_amount) || 0,
+              igv_amount_local: Number(item.igv_amount_local) || 0,
+              igv_amount_usd: Number(item.igv_amount_usd) || 0,
+              igv_amount_clp: Number(item.igv_amount_clp) || 0,
+              isc_amount: Number(item.isc_amount) || 0,
+              total_line: totalLine,
+              total_line_local: totalLineLocal,
+              total_line_usd: salesDocData.currency_code === 'USD' ? totalLine : 0,
+              total_line_clp: salesDocData.currency_code === 'CLP' ? totalLine : 0
+            }
+          })
 
           const { error: itemsError } = await supabase
             .from('sales_doc_items')
