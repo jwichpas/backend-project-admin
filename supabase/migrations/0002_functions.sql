@@ -240,7 +240,7 @@ BEGIN
   NEW.balance_unit_cost := COALESCE(NEW.balance_unit_cost, 0);
 
   -- Convertir total cost a monedas de referencia
-    IF NEW.balance_total_cost IS NOT NULL and v_local IS NOT NULL THEN
+    /* IF NEW.balance_total_cost IS NOT NULL and v_local IS NOT NULL THEN
         NEW.balance_unit_cost_local :=
             convert_currency(NEW.balance_unit_cost, NEW.original_currency_code, v_local, NEW.movement_date);
 
@@ -260,7 +260,7 @@ BEGIN
 
         NEW.balance_total_cost_clp :=
             convert_currency(NEW.balance_total_cost, NEW.original_currency_code, 'CLP', NEW.movement_date);
-    END IF;
+    END IF; */
 
   RETURN NEW;
 END;
@@ -1033,7 +1033,7 @@ CREATE TABLE IF NOT EXISTS cost_of_sales_report (
     sales_total_amount NUMERIC(18,6) DEFAULT 0,
     cost_of_sales_total NUMERIC(18,6) DEFAULT 0,
     profit NUMERIC(18,6) DEFAULT 0,
-    margin NUMERIC(5,4) DEFAULT 0,
+    margin NUMERIC(18,6) DEFAULT 0,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(company_id, product_id, period)
@@ -1241,10 +1241,13 @@ CREATE TRIGGER trigger_update_cost_report_sales
     FOR EACH ROW
     EXECUTE FUNCTION update_cost_of_sales_report();
 
-CREATE TRIGGER trigger_update_cost_report_sales_items
-    AFTER INSERT OR UPDATE OR DELETE ON sales_doc_items
-    FOR EACH ROW
-    EXECUTE FUNCTION update_cost_of_sales_report();
+-- Temporarily disabled due to ON CONFLICT DO UPDATE conflict error
+-- This trigger causes issues when multiple sales_doc_items with same product_id 
+-- are inserted in the same transaction, causing duplicate key conflicts
+-- CREATE TRIGGER trigger_update_cost_report_sales_items
+--     AFTER INSERT OR UPDATE OR DELETE ON sales_doc_items
+--     FOR EACH ROW
+--     EXECUTE FUNCTION update_cost_of_sales_report();
 
 
 -- ===================== PRODUCTS =====================
