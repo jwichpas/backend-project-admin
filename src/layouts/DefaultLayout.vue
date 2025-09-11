@@ -28,9 +28,15 @@
             <p v-if="!isCollapsed" class="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Ventas</p>
           </li>
           <li>
+            <router-link to="/pos" class="group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors" :class="getNavClass('/pos')">
+              <CreditCard class="mr-3 h-5 w-5 transition-colors" :class="getIconClass('/pos')" />
+              <span v-if="!isCollapsed">Punto de Venta</span>
+            </router-link>
+          </li>
+          <li>
             <router-link to="/sales" class="group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors" :class="getNavClass('/sales')">
               <Receipt class="mr-3 h-5 w-5 transition-colors" :class="getIconClass('/sales')" />
-              <span v-if="!isCollapsed">Ventas</span>
+              <span v-if="!isCollapsed">Gestión de Ventas</span>
             </router-link>
           </li>
           <li>
@@ -396,7 +402,7 @@ import { useAuthStore } from '@/stores/auth'
 import {
   Menu, LayoutDashboard, Settings, Moon, Sun, User,
   Receipt, Users, ShoppingCart, Truck, Package, Warehouse, BarChart3,
-  Building, MapPin, FileText, ChevronDown, Bell, DollarSign
+  Building, MapPin, FileText, ChevronDown, Bell, DollarSign, CreditCard
 } from 'lucide-vue-next'
 import Select from '@/components/ui/Select.vue'
 import { supabase } from '@/lib/supabase'

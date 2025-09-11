@@ -62,6 +62,12 @@ const router = createRouter({
       component: () => import('../views/SalesView.vue'),
       meta: { requiresAuth: true }
     },
+    {
+      path: '/pos',
+      name: 'pos',
+      component: () => import('../views/Sales/PointOfSaleView.vue'),
+      meta: { requiresAuth: true }
+    },
     // Purchases module with nested routes
     {
       path: '/purchases',
