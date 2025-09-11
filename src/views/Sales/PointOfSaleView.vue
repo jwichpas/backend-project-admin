@@ -145,19 +145,48 @@
                 Nuevo
               </Button>
             </div>
-            <select
-              v-model="selectedCustomer"
-              class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <option value="">Cliente General</option>
-              <option
-                v-for="customer in customers"
-                :key="customer.id"
-                :value="customer.id"
+            <div class="relative">
+              <Search class="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                v-model="customerSearch"
+                placeholder="Buscar cliente por nombre o documento..."
+                class="h-10 pl-10"
+                @input="searchCustomers"
+                @focus="showCustomerDropdown = true"
+              />
+              <!-- Customer Dropdown -->
+              <div 
+                v-if="showCustomerDropdown && (filteredCustomers.length > 0 || customerSearch)"
+                class="absolute z-50 w-full mt-1 bg-background border border-border rounded-md shadow-lg max-h-60 overflow-y-auto"
               >
-                {{ customer.name }} - {{ customer.doc_number }}
-              </option>
-            </select>
+                <div 
+                  class="px-3 py-2 cursor-pointer hover:bg-muted"
+                  :class="{ 'bg-muted': !selectedCustomer }"
+                  @click="selectCustomer(null)"
+                >
+                  <div class="font-medium">Cliente General</div>
+                  <div class="text-xs text-muted-foreground">Sin identificación específica</div>
+                </div>
+                <div
+                  v-for="customer in filteredCustomers"
+                  :key="customer.id"
+                  class="px-3 py-2 cursor-pointer hover:bg-muted"
+                  :class="{ 'bg-muted': selectedCustomer === customer.id }"
+                  @click="selectCustomer(customer)"
+                >
+                  <div class="font-medium">{{ customer.fullname || customer.name }}</div>
+                  <div class="text-xs text-muted-foreground">{{ customer.doc_number }} - {{ customer.email || 'Sin email' }}</div>
+                </div>
+                <div v-if="filteredCustomers.length === 0 && customerSearch" class="px-3 py-2 text-sm text-muted-foreground">
+                  No se encontraron clientes
+                </div>
+              </div>
+            </div>
+            <!-- Selected Customer Display -->
+            <div v-if="selectedCustomerData" class="p-2 bg-muted rounded-md">
+              <div class="text-sm font-medium">{{ selectedCustomerData.fullname || selectedCustomerData.name }}</div>
+              <div class="text-xs text-muted-foreground">{{ selectedCustomerData.doc_number }}</div>
+            </div>
           </div>
         </div>
 
@@ -222,7 +251,40 @@
                     >
                       <Minus class="h-3 w-3" />
                     </Button>
-                    <span class="text-sm font-medium w-8 text-center">{{ item.quantity }}</span>
+                    
+                    <!-- Quantity Display/Edit -->
+                    <div v-if="editingQuantity[index]" class="flex items-center gap-1">
+                      <input
+                        type="number"
+                        :value="item.quantity"
+                        @blur="saveQuantity(index, Number($event.target.value))"
+                        @keyup.enter="$event.target.blur()"
+                        @keyup.escape="cancelQuantityEdit(index)"
+                        class="w-12 h-6 text-sm text-center border border-input rounded px-1 bg-background"
+                        min="1"
+                        ref="quantityInput"
+                      />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        class="h-4 w-4 p-0"
+                        @click="saveQuantity(index, item.quantity)"
+                      >
+                        <Check class="h-3 w-3 text-green-600" />
+                      </Button>
+                    </div>
+                    <div v-else class="flex items-center gap-1">
+                      <span class="text-sm font-medium w-8 text-center">{{ item.quantity }}</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        class="h-4 w-4 p-0 opacity-60 hover:opacity-100"
+                        @click="startQuantityEdit(index)"
+                      >
+                        <Pencil class="h-3 w-3" />
+                      </Button>
+                    </div>
+                    
                     <Button
                       variant="outline"
                       size="sm"
@@ -233,9 +295,42 @@
                     </Button>
                   </div>
                   <div class="text-right">
-                    <p class="text-xs text-muted-foreground">
-                      {{ formatCurrency(item.unit_price) }} c/u
-                    </p>
+                    <!-- Unit Price Display/Edit -->
+                    <div class="text-xs text-muted-foreground mb-1 flex items-center justify-end gap-1">
+                      <div v-if="editingPrice[index]" class="flex items-center gap-1">
+                        <input
+                          type="number"
+                          :value="item.unit_price"
+                          @blur="saveUnitPrice(index, Number($event.target.value))"
+                          @keyup.enter="$event.target.blur()"
+                          @keyup.escape="cancelPriceEdit(index)"
+                          class="w-16 h-5 text-xs text-right border border-input rounded px-1 bg-background"
+                          min="0"
+                          step="0.01"
+                          ref="priceInput"
+                        />
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          class="h-4 w-4 p-0"
+                          @click="saveUnitPrice(index, item.unit_price)"
+                        >
+                          <Check class="h-3 w-3 text-green-600" />
+                        </Button>
+                      </div>
+                      <div v-else class="flex items-center gap-1">
+                        <span>{{ formatCurrency(item.unit_price) }}</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          class="h-4 w-4 p-0 opacity-60 hover:opacity-100"
+                          @click="startPriceEdit(index)"
+                        >
+                          <Pencil class="h-3 w-3" />
+                        </Button>
+                      </div>
+                      <span>c/u</span>
+                    </div>
                     <p class="font-bold text-sm">
                       {{ formatCurrency(item.total) }}
                     </p>
@@ -324,11 +419,67 @@
           </div>
           <div>
             <label class="text-sm font-medium">Serie por Defecto - Boletas</label>
-            <Input v-model="posSettings.boletaSeries" placeholder="B001" class="mt-1" />
+            <select 
+              v-model="posSettings.boletaSeries" 
+              class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring mt-1"
+            >
+              <option value="">Seleccionar serie</option>
+              <option 
+                v-for="serie in availableBoletaSeries" 
+                :key="serie.series" 
+                :value="serie.series"
+              >
+                {{ serie.series }} - {{ serie.document_type_name }} (Último: {{ serie.last_number }})
+              </option>
+            </select>
           </div>
           <div>
             <label class="text-sm font-medium">Serie por Defecto - Facturas</label>
-            <Input v-model="posSettings.facturaSeries" placeholder="F001" class="mt-1" />
+            <select 
+              v-model="posSettings.facturaSeries" 
+              class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring mt-1"
+            >
+              <option value="">Seleccionar serie</option>
+              <option 
+                v-for="serie in availableFacturaSeries" 
+                :key="serie.series" 
+                :value="serie.series"
+              >
+                {{ serie.series }} - {{ serie.document_type_name }} (Último: {{ serie.last_number }})
+              </option>
+            </select>
+          </div>
+          
+          <div>
+            <label class="text-sm font-medium">Tipo Operación Kardex</label>
+            <select 
+              v-model="posSettings.operationTypeKardex" 
+              class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring mt-1"
+            >
+              <option 
+                v-for="type in operationTypes" 
+                :key="type.code" 
+                :value="type.code"
+              >
+                {{ type.code }} - {{ type.descripcion }}
+              </option>
+            </select>
+          </div>
+          
+          <div>
+            <label class="text-sm font-medium">Tipo Operación Venta</label>
+            <select 
+              v-model="posSettings.operationTypeVenta" 
+              class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring mt-1"
+            >
+              <option 
+                v-for="type in operationTypesV2" 
+                :key="type.code" 
+                :value="type.code"
+              >
+                {{ type.code }} - {{ type.descripcion }}
+              </option>
+            </select>
           </div>
         </div>
         <div class="flex justify-end gap-2 mt-6">
@@ -345,9 +496,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { useCompaniesStore } from '@/stores/companies'
 import { useSalesStore } from '@/stores/sales'
+import { useAuthStore } from '@/stores/auth'
+import { useDocumentSeries } from '@/composables/useDocumentSeries'
 // Removed: import { useProductsStore } from '@/stores/products' - using salesStore instead
 import {
   CreditCard,
@@ -360,7 +513,9 @@ import {
   Minus,
   Clock,
   Trash2,
-  Loader2
+  Loader2,
+  Pencil,
+  Check
 } from 'lucide-vue-next'
 
 // UI Components
@@ -374,18 +529,37 @@ import DialogTitle from '@/components/ui/DialogTitle.vue'
 
 const companiesStore = useCompaniesStore()
 const salesStore = useSalesStore()
+const authStore = useAuthStore()
+const { 
+  series, 
+  operationTypes,
+  operationTypesV2,
+  loading: seriesLoading, 
+  error: seriesError,
+  fetchAvailableSeries,
+  fetchOperationTypes,
+  fetchOperationTypesV2,
+  getNextDocumentNumber,
+  formatFullDocumentNumber
+} = useDocumentSeries()
 // Removed productsStore - using salesStore for products
 
 // State
 const productSearch = ref('')
 const selectedCategory = ref<string | null>(null)
 const selectedCustomer = ref('')
+const customerSearch = ref('')
+const showCustomerDropdown = ref(false)
 const documentType = ref('03') // Boleta by default
 const processing = ref(false)
 const showSettingsDialog = ref(false)
 const showProductDialog = ref(false)
 const showCustomerDialog = ref(false)
 const failedImages = ref(new Set<string>())
+
+// Edit states
+const editingQuantity = ref<Record<number, boolean>>({})
+const editingPrice = ref<Record<number, boolean>>({})
 
 // Cart
 const cartItems = ref<Array<{
@@ -399,12 +573,40 @@ const cartItems = ref<Array<{
 const posSettings = ref({
   terminal: 'Terminal 01',
   boletaSeries: 'B001',
-  facturaSeries: 'F001'
+  facturaSeries: 'F001',
+  operationTypeKardex: '01', // cat_12 - Default: VENTA INTERNA
+  operationTypeVenta: '0101' // cat_17 - Default: VENTA INTERNA
 })
 
-// Mock current user
-const currentUser = ref({
-  name: 'Usuario Vendedor'
+// Load settings from localStorage
+const loadSettingsFromStorage = () => {
+  const stored = localStorage.getItem('pos_settings')
+  if (stored) {
+    try {
+      const parsed = JSON.parse(stored)
+      posSettings.value = { ...posSettings.value, ...parsed }
+    } catch (error) {
+      console.error('Error parsing stored POS settings:', error)
+    }
+  }
+}
+
+// Save settings to localStorage
+const saveSettingsToStorage = () => {
+  localStorage.setItem('pos_settings', JSON.stringify(posSettings.value))
+}
+
+// Computed current user from auth store
+const currentUser = computed(() => {
+  if (authStore.user) {
+    return {
+      name: authStore.user.user_metadata?.name || 
+            authStore.user.user_metadata?.full_name || 
+            authStore.user.email?.split('@')[0] || 
+            'Usuario'
+    }
+  }
+  return { name: 'Usuario' }
 })
 
 // Computed
@@ -427,6 +629,22 @@ const categories = computed(() => {
 })
 
 const customers = computed(() => salesStore.activeCustomers || [])
+
+const filteredCustomers = computed(() => {
+  if (!customerSearch.value) return customers.value
+  
+  const search = customerSearch.value.toLowerCase()
+  return customers.value.filter(customer => 
+    (customer.fullname || customer.name || '').toLowerCase().includes(search) ||
+    customer.doc_number?.toLowerCase().includes(search) ||
+    customer.email?.toLowerCase().includes(search)
+  )
+})
+
+const selectedCustomerData = computed(() => {
+  if (!selectedCustomer.value) return null
+  return customers.value.find(c => c.id === selectedCustomer.value)
+})
 
 const filteredProducts = computed(() => {
   let products = salesStore.availableProducts || []
@@ -461,10 +679,49 @@ const cartTotal = computed(() => {
   return cartSubtotal.value + cartIgv.value
 })
 
+// Series computadas
+const availableBoletaSeries = computed(() => {
+  return series.value.filter(s => s.document_type_code === '03' && s.is_active)
+})
+
+const availableFacturaSeries = computed(() => {
+  return series.value.filter(s => s.document_type_code === '01' && s.is_active)
+})
+
+// Serie actual seleccionada
+const currentSeries = computed(() => {
+  const seriesCode = documentType.value === '01' ? posSettings.value.facturaSeries : posSettings.value.boletaSeries
+  return series.value.find(s => s.series === seriesCode && s.document_type_code === documentType.value)
+})
+
 // Methods
 const searchProducts = () => {
   // Search is handled by computed property
 }
+
+const searchCustomers = () => {
+  // Search is handled by computed property
+  showCustomerDropdown.value = true
+}
+
+const selectCustomer = (customer: any) => {
+  if (customer) {
+    selectedCustomer.value = customer.id
+    customerSearch.value = customer.fullname || customer.name
+  } else {
+    selectedCustomer.value = ''
+    customerSearch.value = 'Cliente General'
+  }
+  showCustomerDropdown.value = false
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', (e: Event) => {
+  const target = e.target as HTMLElement
+  if (!target.closest('.relative')) {
+    showCustomerDropdown.value = false
+  }
+})
 
 const onPriceListChange = async (event: Event) => {
   const target = event.target as HTMLSelectElement
@@ -508,9 +765,66 @@ const updateQuantity = (index: number, newQuantity: number) => {
   cartItems.value[index].total = cartItems.value[index].unit_price * newQuantity
 }
 
+const updateUnitPrice = (index: number, newPrice: number) => {
+  if (newPrice < 0) return
+  
+  cartItems.value[index].unit_price = newPrice
+  cartItems.value[index].total = newPrice * cartItems.value[index].quantity
+}
+
+// Inline editing functions
+const startQuantityEdit = (index: number) => {
+  editingQuantity.value[index] = true
+  // Focus the input after DOM update
+  nextTick(() => {
+    const inputs = document.querySelectorAll('input[ref="quantityInput"]')
+    if (inputs[index]) {
+      (inputs[index] as HTMLInputElement).focus()
+      ;(inputs[index] as HTMLInputElement).select()
+    }
+  })
+}
+
+const saveQuantity = (index: number, newQuantity: number) => {
+  if (newQuantity >= 1) {
+    updateQuantity(index, newQuantity)
+  }
+  editingQuantity.value[index] = false
+}
+
+const cancelQuantityEdit = (index: number) => {
+  editingQuantity.value[index] = false
+}
+
+const startPriceEdit = (index: number) => {
+  editingPrice.value[index] = true
+  // Focus the input after DOM update
+  nextTick(() => {
+    const inputs = document.querySelectorAll('input[ref="priceInput"]')
+    if (inputs[index]) {
+      (inputs[index] as HTMLInputElement).focus()
+      ;(inputs[index] as HTMLInputElement).select()
+    }
+  })
+}
+
+const saveUnitPrice = (index: number, newPrice: number) => {
+  if (newPrice >= 0) {
+    updateUnitPrice(index, newPrice)
+  }
+  editingPrice.value[index] = false
+}
+
+const cancelPriceEdit = (index: number) => {
+  editingPrice.value[index] = false
+}
+
 const clearCart = () => {
   cartItems.value = []
   selectedCustomer.value = ''
+  // Clear editing states
+  editingQuantity.value = {}
+  editingPrice.value = {}
 }
 
 const holdSale = () => {
@@ -524,16 +838,39 @@ const processPayment = async () => {
   processing.value = true
   
   try {
+    // Validar que la empresa y serie estén definidas
+    if (!companiesStore.currentCompany?.id) {
+      throw new Error('No hay empresa seleccionada')
+    }
+
+    const seriesCode = documentType.value === '01' ? posSettings.value.facturaSeries : posSettings.value.boletaSeries
+    if (!seriesCode) {
+      throw new Error('No se ha configurado una serie para este tipo de documento')
+    }
+
+    // Obtener el siguiente número usando la función de la base de datos
+    const nextNumber = await getNextDocumentNumber(
+      companiesStore.currentCompany.id,
+      documentType.value,
+      seriesCode
+    )
+
+    if (!nextNumber) {
+      throw new Error('No se pudo generar el número de documento')
+    }
+
     // Create sales document
     const salesDocData = {
-      company_id: companiesStore.currentCompany?.id,
+      company_id: companiesStore.currentCompany.id,
       customer_id: selectedCustomer.value || null,
       doc_type: documentType.value,
-      series: documentType.value === '01' ? posSettings.value.facturaSeries : posSettings.value.boletaSeries,
-      number: Date.now(), // Mock number generation
+      series: seriesCode,
+      number: nextNumber, // Usar número generado automáticamente
       issue_date: new Date().toISOString().split('T')[0],
       currency_code: 'PEN',
       exchange_rate: 1,
+      op_type_venta: posSettings.value.operationTypeVenta, // Tipo operación venta (cat_17)
+      op_type_kardex: posSettings.value.operationTypeKardex, // Tipo operación kardex (cat_12)
       total_ope_gravadas: cartSubtotal.value,
       total_ope_gravadas_local: cartSubtotal.value,
       total_igv: cartIgv.value,
@@ -557,19 +894,22 @@ const processPayment = async () => {
     // Clear cart after successful sale
     clearCart()
     
-    // TODO: Show success message and print receipt
-    console.log('Sale processed successfully!')
+    // Show success message with document number
+    const fullDocNumber = formatFullDocumentNumber(seriesCode, nextNumber)
+    console.log(`Venta procesada exitosamente! Documento: ${fullDocNumber}`)
+    
+    // TODO: Show success toast and print receipt
     
   } catch (error) {
     console.error('Error processing sale:', error)
-    // TODO: Show error message
+    // TODO: Show error toast with specific message
   } finally {
     processing.value = false
   }
 }
 
 const saveSettings = () => {
-  // TODO: Save POS settings to localStorage or backend
+  saveSettingsToStorage()
   showSettingsDialog.value = false
   console.log('Settings saved:', posSettings.value)
 }
@@ -588,15 +928,36 @@ const isImageError = (productId: string) => {
 
 // Lifecycle
 onMounted(async () => {
+  // Load settings from localStorage first
+  loadSettingsFromStorage()
+  
   if (companiesStore.currentCompany) {
-    // First load price lists
-    await salesStore.fetchPriceLists(companiesStore.currentCompany.id)
-    
-    // Then load products with selected price list and customers
+    // Load all necessary data for POS
     await Promise.all([
-      salesStore.fetchProducts(companiesStore.currentCompany.id, salesStore.selectedPriceList?.id),
-      salesStore.fetchCustomers(companiesStore.currentCompany.id)
+      // Load price lists
+      salesStore.fetchPriceLists(companiesStore.currentCompany.id),
+      // Load customers
+      salesStore.fetchCustomers(companiesStore.currentCompany.id),
+      // Load available series for documents
+      fetchAvailableSeries(companiesStore.currentCompany.id),
+      // Load SUNAT operation types
+      fetchOperationTypes(),
+      fetchOperationTypesV2()
     ])
+    
+    // Then load products with selected price list
+    await salesStore.fetchProducts(companiesStore.currentCompany.id, salesStore.selectedPriceList?.id)
+    
+    // Set default series if available and not already set
+    if (availableBoletaSeries.value.length > 0 && !posSettings.value.boletaSeries) {
+      posSettings.value.boletaSeries = availableBoletaSeries.value[0].series
+    }
+    if (availableFacturaSeries.value.length > 0 && !posSettings.value.facturaSeries) {
+      posSettings.value.facturaSeries = availableFacturaSeries.value[0].series
+    }
+    
+    // Save updated settings
+    saveSettingsToStorage()
   }
 })
 </script>

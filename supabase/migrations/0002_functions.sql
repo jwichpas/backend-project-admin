@@ -1231,15 +1231,15 @@ DROP TRIGGER IF EXISTS trigger_update_cost_report_stock ON stock_ledger;
 DROP TRIGGER IF EXISTS trigger_update_cost_report_sales ON sales_docs;
 DROP TRIGGER IF EXISTS trigger_update_cost_report_sales_items ON sales_doc_items;
 
-CREATE TRIGGER trigger_update_cost_report_stock
-    AFTER INSERT OR UPDATE OR DELETE ON stock_ledger
-    FOR EACH ROW
-    EXECUTE FUNCTION update_cost_of_sales_report();
+-- CREATE TRIGGER trigger_update_cost_report_stock
+--    AFTER INSERT OR UPDATE OR DELETE ON stock_ledger
+--    FOR EACH ROW
+--    EXECUTE FUNCTION update_cost_of_sales_report();
 
-CREATE TRIGGER trigger_update_cost_report_sales
-    AFTER INSERT OR UPDATE OR DELETE ON sales_docs
-    FOR EACH ROW
-    EXECUTE FUNCTION update_cost_of_sales_report();
+-- CREATE TRIGGER trigger_update_cost_report_sales
+--     AFTER INSERT OR UPDATE OR DELETE ON sales_docs
+--    FOR EACH ROW
+--    EXECUTE FUNCTION update_cost_of_sales_report();
 
 -- Temporarily disabled due to ON CONFLICT DO UPDATE conflict error
 -- This trigger causes issues when multiple sales_doc_items with same product_id 
@@ -1791,4 +1791,81 @@ FROM purchase_docs pd
 LEFT JOIN purchase_additional_costs pac ON pac.purchase_doc_id = pd.id
 GROUP BY pd.id, pd.company_id, doc_reference
 ORDER BY pd.issue_date DESC;
+
+-- ============================================================================
+-- FUNCIONES PARA PUNTO DE VENTA - SERIES Y NUMERACION
+-- ============================================================================
+
+-- Función para obtener series disponibles por empresa y tipo de documento
+CREATE OR REPLACE FUNCTION get_available_document_series(
+    p_company_id UUID,
+    p_document_type_code VARCHAR DEFAULT NULL,
+    p_branch_id UUID DEFAULT NULL
+)
+RETURNS TABLE(
+    id BIGINT,
+    document_type_code VARCHAR(4),
+    document_type_name TEXT,
+    series VARCHAR(4),
+    branch_id UUID,
+    branch_name TEXT,
+    last_number BIGINT,
+    is_active BOOLEAN
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        ds.id,
+        ds.document_type_code,
+        std.descripcion as document_type_name,
+        ds.series,
+        ds.branch_id,
+        b.name as branch_name,
+        COALESCE(dc.last_number, 0) as last_number,
+        ds.is_active
+    FROM document_series ds
+    LEFT JOIN sunat.cat_01_tipo_documento std ON std.code = ds.document_type_code
+    LEFT JOIN branches b ON b.id = ds.branch_id
+    LEFT JOIN document_counters dc ON dc.company_id = ds.company_id 
+        AND dc.document_type_code = ds.document_type_code 
+        AND dc.series = ds.series
+    WHERE ds.company_id = p_company_id
+        AND ds.is_active = true
+        AND (p_document_type_code IS NULL OR ds.document_type_code = p_document_type_code)
+        AND (p_branch_id IS NULL OR ds.branch_id = p_branch_id OR ds.branch_id IS NULL)
+    ORDER BY ds.document_type_code, ds.series;
+END;
+$$;
+
+
+-- Función para validar si una serie existe y está activa
+CREATE OR REPLACE FUNCTION validate_document_series(
+    p_company_id UUID,
+    p_document_type_code VARCHAR(2),
+    p_series VARCHAR(4)
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_exists BOOLEAN := FALSE;
+BEGIN
+    SELECT EXISTS(
+        SELECT 1 
+        FROM document_series 
+        WHERE company_id = p_company_id
+            AND document_type_code = p_document_type_code
+            AND series = p_series
+            AND is_active = true
+    ) INTO v_exists;
+    
+    RETURN v_exists;
+END;
+$$;
 

@@ -39,7 +39,7 @@ CREATE SCHEMA IF NOT EXISTS partitions;
 
 -- Dominios para consistencia de datos
 CREATE DOMAIN monetary AS NUMERIC(18,6) CHECK (VALUE >= 0);
-CREATE DOMAIN percentage AS NUMERIC(5,4) CHECK (VALUE >= 0 AND VALUE <= 100);
+CREATE DOMAIN percentage AS NUMERIC(18,6) CHECK (VALUE >= 0 AND VALUE <= 100);
 CREATE DOMAIN quantity AS NUMERIC(18,6) CHECK (VALUE >= 0);
 CREATE DOMAIN ruc_pe AS VARCHAR(11) CHECK (VALUE ~ '^\\d{11}$');
 CREATE DOMAIN email_address AS TEXT CHECK (VALUE ~* '^[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}$');

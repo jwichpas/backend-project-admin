@@ -108,6 +108,7 @@ CREATE POLICY "Solo usuarios autenticados pueden ver todos los datos" ON public.
 CREATE POLICY "Solo usuarios autenticados pueden ver todos los datos" ON public.sales_orders as PERMISSIVE FOR ALL to authenticated USING (true);
 CREATE POLICY "Solo usuarios autenticados pueden ver todos los datos" ON public.sales_order_items as PERMISSIVE FOR ALL to authenticated USING (true);
 CREATE POLICY "Solo usuarios autenticados pueden ver todos los datos" ON public.sales_docs as PERMISSIVE FOR ALL to authenticated USING (true);
+CREATE POLICY "Solo usuarios autenticados pueden ver todos los datos" ON public.sales_doc_items as PERMISSIVE FOR ALL to authenticated USING (true);
 CREATE POLICY "Solo usuarios autenticados pueden ver todos los datos" ON public.shipments as PERMISSIVE FOR ALL to authenticated USING (true);
 CREATE POLICY "Solo usuarios autenticados pueden ver todos los datos" ON public.shipment_items as PERMISSIVE FOR ALL to authenticated USING (true);
 CREATE POLICY "Solo usuarios autenticados pueden ver todos los datos" ON public.document_series as PERMISSIVE FOR ALL to authenticated USING (true);
