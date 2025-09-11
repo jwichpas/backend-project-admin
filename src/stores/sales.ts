@@ -427,19 +427,29 @@ export const useSalesStore = defineStore('sales', {
           .from('sales_order_items')
           .select(`
             *,
-            products(name, sku, unit_code),
-            sunat_cat_03_unidades_medida:unit_code(descripcion)
+            products(name, sku, unit_code)
           `)
           .eq('sales_order_id', salesOrderId)
           .order('created_at', { ascending: true })
 
         if (error) throw error
         
+        // Get measurement units for all items
+        let measurementUnits = []
+        if (data && data.length > 0) {
+          const { data: unitsData, error: unitsError } = await supabase
+            .rpc('get_sunat_measurement_units')
+          
+          if (!unitsError) {
+            measurementUnits = unitsData || []
+          }
+        }
+        
         this.salesOrderItems = data?.map(item => ({
           ...item,
           product_name: item.products?.name,
           product_sku: item.products?.sku,
-          unit_description: item.sunat_cat_03_unidades_medida?.descripcion
+          unit_description: measurementUnits.find(u => u.code === item.products?.unit_code)?.descripcion
         })) || []
       } catch (error: any) {
         this.error = error.message
