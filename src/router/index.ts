@@ -138,7 +138,7 @@ const router = createRouter({
     {
       path: '/suppliers',
       name: 'suppliers',  
-      component: () => import('../views/SuppliersView.vue'),
+      component: () => import('../views/Suppliers/SuppliersView.vue'),
       meta: { requiresAuth: true }
     },
     // Vehicles module with nested routes
