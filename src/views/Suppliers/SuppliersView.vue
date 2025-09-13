@@ -515,13 +515,17 @@ const loadSuppliers = async () => {
 }
 
 const getSupplierInitials = (supplier: Supplier): string => {
-  const name = supplier.commercial_name || supplier.name
+  const name = supplier.commercial_name || supplier.name || 'Supplier'
+  if (!name || name.trim() === '') return 'SP'
+  
   return name
+    .trim()
     .split(' ')
+    .filter(word => word.length > 0)
     .map(word => word.charAt(0))
     .join('')
     .toUpperCase()
-    .substring(0, 2)
+    .substring(0, 2) || 'SP'
 }
 
 const formatDate = (dateString: string): string => {
