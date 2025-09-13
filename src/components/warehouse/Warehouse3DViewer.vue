@@ -43,9 +43,27 @@
 
     <!-- 3D Scene -->
     <div class="relative h-full w-full">
+      <!-- No data message -->
+      <div 
+        v-if="!warehouseBounds && locations.length === 0"
+        class="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-900"
+      >
+        <div class="text-center text-gray-500 dark:text-gray-400">
+          <div class="mb-4">
+            <svg class="w-16 h-16 mx-auto text-gray-300 dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+            </svg>
+          </div>
+          <h3 class="text-lg font-medium mb-2">No hay almacenes configurados</h3>
+          <p class="text-sm mb-4">Para ver la vista 3D, necesitas tener al menos un almacén con dimensiones configuradas.</p>
+          <p class="text-xs">Verifica que tengas almacenes con ubicaciones de productos en tu base de datos.</p>
+        </div>
+      </div>
+      
       <div
+        v-else
         ref="sceneContainer"
-        class="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200"
+        class="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-900"
         @contextmenu.prevent
       />
       

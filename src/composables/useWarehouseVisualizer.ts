@@ -80,20 +80,35 @@ export function useWarehouseVisualizer() {
   })
 
   const warehouseBounds = computed(() => {
-    if (!selectedWarehouseData.value) return null
+    if (!selectedWarehouseData.value) {
+      // Provide default bounds if there are locations but no warehouse data
+      if (locations.value.length > 0) {
+        console.log('📜 Using default warehouse bounds because we have locations but no warehouse data')
+        return {
+          width: 100,
+          height: 20,
+          length: 80
+        }
+      }
+      return null
+    }
     
     const warehouse = selectedWarehouseData.value.warehouse
-    return {
+    const bounds = {
       width: warehouse.width || 100,
-      height: warehouse.height || 50,
-      length: warehouse.length || 100
+      height: warehouse.height || 20,
+      length: warehouse.length || 80
     }
+    console.log('🏗️ Warehouse bounds calculated:', bounds)
+    return bounds
   })
 
   // Methods
   const fetchWarehouses = async (companyId: string) => {
     try {
       loading.value = true
+      console.log('🔄 Fetching warehouses for company:', companyId)
+      
       const { data, error: err } = await supabase
         .from('warehouses')
         .select('*')
@@ -103,9 +118,10 @@ export function useWarehouseVisualizer() {
 
       if (err) throw err
       warehouses.value = data || []
+      console.log('✅ Warehouses fetched:', warehouses.value.length, warehouses.value)
     } catch (err: any) {
       error.value = err.message
-      console.error('Error fetching warehouses:', err)
+      console.error('❌ Error fetching warehouses:', err)
     } finally {
       loading.value = false
     }
@@ -114,6 +130,8 @@ export function useWarehouseVisualizer() {
   const fetchWarehouseZones = async (companyId: string, warehouseId?: string) => {
     try {
       loading.value = true
+      console.log('🔄 Fetching zones for company:', companyId, 'warehouse:', warehouseId)
+      
       let query = supabase
         .from('warehouse_zones')
         .select('*')
@@ -128,9 +146,10 @@ export function useWarehouseVisualizer() {
 
       if (err) throw err
       zones.value = data || []
+      console.log('✅ Zones fetched:', zones.value.length, zones.value)
     } catch (err: any) {
       error.value = err.message
-      console.error('Error fetching zones:', err)
+      console.error('❌ Error fetching zones:', err)
     } finally {
       loading.value = false
     }
@@ -159,6 +178,7 @@ export function useWarehouseVisualizer() {
   const fetchProductLocations = async (companyId: string, warehouseId?: string) => {
     try {
       loading.value = true
+      console.log('🔄 Fetching product locations for company:', companyId, 'warehouse:', warehouseId)
       
       // First get all locations
       let locationQuery = supabase
@@ -170,6 +190,7 @@ export function useWarehouseVisualizer() {
       const { data: locationData, error: locationError } = await locationQuery
 
       if (locationError) throw locationError
+      console.log('📍 Raw location data:', locationData?.length || 0, locationData)
       
       // Enrich locations with product and zone data
       const enrichedLocations: LocationWithProduct[] = (locationData || []).map(location => {
@@ -192,13 +213,15 @@ export function useWarehouseVisualizer() {
         locations.value = enrichedLocations.filter(l => 
           l.warehouse_zone_id && warehouseZoneIds.includes(l.warehouse_zone_id)
         )
+        console.log('✅ Filtered locations for warehouse:', locations.value.length)
       } else {
         locations.value = enrichedLocations
+        console.log('✅ All locations loaded:', locations.value.length)
       }
 
     } catch (err: any) {
       error.value = err.message
-      console.error('Error fetching locations:', err)
+      console.error('❌ Error fetching locations:', err)
     } finally {
       loading.value = false
     }

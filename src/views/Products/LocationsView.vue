@@ -10,11 +10,11 @@
       </div>
       <div class="flex items-center gap-3">
         <!-- View mode selector -->
-        <div class="flex items-center bg-gray-100 rounded-lg p-1">
+        <div class="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
           <Button
             variant="ghost"
             size="sm"
-            :class="{ 'bg-white shadow-sm': viewMode === 'table' }"
+            :class="{ 'bg-white dark:bg-gray-700 shadow-sm': viewMode === 'table' }"
             @click="setViewMode('table')"
           >
             <List class="h-4 w-4 mr-1" />
@@ -23,7 +23,7 @@
           <Button
             variant="ghost"
             size="sm"
-            :class="{ 'bg-white shadow-sm': viewMode === '2d' }"
+            :class="{ 'bg-white dark:bg-gray-700 shadow-sm': viewMode === '2d' }"
             @click="setViewMode('2d')"
           >
             <Map class="h-4 w-4 mr-1" />
@@ -32,7 +32,7 @@
           <Button
             variant="ghost"
             size="sm"
-            :class="{ 'bg-white shadow-sm': viewMode === '3d' }"
+            :class="{ 'bg-white dark:bg-gray-700 shadow-sm': viewMode === '3d' }"
             @click="setViewMode('3d')"
           >
             <Box class="h-4 w-4 mr-1" />
@@ -542,7 +542,16 @@ const cancelForm = () => {
 
 onMounted(async () => {
   if (companyStore.selectedCompany) {
+    console.log('🏢 Selected company:', companyStore.selectedCompany)
+    
     await warehouseVisualizer.initializeData(companyStore.selectedCompany.id)
+    
+    // Debug warehouse data
+    console.log('🏭 Warehouses loaded:', warehouseVisualizer.warehouses.value)
+    console.log('📦 Zones loaded:', warehouseVisualizer.zones.value)
+    console.log('📍 Locations loaded:', warehouseVisualizer.locations.value)
+    console.log('🏗️ Selected warehouse data:', warehouseVisualizer.selectedWarehouseData.value)
+    console.log('📐 Warehouse bounds:', warehouseVisualizer.warehouseBounds.value)
     
     // Also load basic products data for the form
     await Promise.all([
@@ -550,6 +559,8 @@ onMounted(async () => {
       productsStore.fetchWarehouses(companyStore.selectedCompany.id),
       productsStore.fetchWarehouseZones(companyStore.selectedCompany.id)
     ])
+  } else {
+    console.warn('⚠️ No company selected')
   }
 })
 </script>

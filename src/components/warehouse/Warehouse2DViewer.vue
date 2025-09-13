@@ -37,8 +37,26 @@
     </div>
 
     <!-- 2D Visualization -->
-    <div class="relative h-full w-full overflow-hidden bg-gray-100">
+    <div class="relative h-full w-full overflow-hidden bg-gray-100 dark:bg-gray-900">
+      <!-- No data message -->
+      <div 
+        v-if="!warehouseBounds && locations.length === 0"
+        class="absolute inset-0 flex items-center justify-center"
+      >
+        <div class="text-center text-gray-500 dark:text-gray-400">
+          <div class="mb-4">
+            <svg class="w-16 h-16 mx-auto text-gray-300 dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+            </svg>
+          </div>
+          <h3 class="text-lg font-medium mb-2">No hay almacenes configurados</h3>
+          <p class="text-sm mb-4">Para ver la vista 2D, necesitas tener al menos un almacén con dimensiones configuradas.</p>
+          <p class="text-xs">Verifica que tengas almacenes con ubicaciones de productos en tu base de datos.</p>
+        </div>
+      </div>
+      
       <div
+        v-else
         ref="containerRef"
         class="absolute inset-0 cursor-move"
         @mousedown="handleMouseDown"
