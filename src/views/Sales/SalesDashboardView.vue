@@ -134,10 +134,10 @@
                 <span class="text-sm font-medium">{{ formatMonth(trend.sale_month) }}</span>
                 <span class="text-sm font-bold">{{ formatCurrency(trend.total_sales) }}</span>
               </div>
-              <div class="w-full bg-gray-200 rounded-full h-2">
+              <div class="w-full bg-muted rounded-full h-2">
                 <div 
                   class="h-2 rounded-full transition-all duration-300"
-                  :class="trend.growth_percentage > 0 ? 'bg-green-500' : 'bg-red-500'"
+                  :class="trend.growth_percentage > 0 ? 'bg-green-500 dark:bg-green-400' : 'bg-red-500 dark:bg-red-400'"
                   :style="{ width: `${Math.min(Math.abs(trend.growth_percentage || 0), 100)}%` }"
                 ></div>
               </div>
@@ -145,7 +145,7 @@
                 <span class="text-xs text-muted-foreground">{{ trend.total_transactions }} transacciones</span>
                 <span 
                   class="text-xs font-medium"
-                  :class="(trend.growth_percentage || 0) > 0 ? 'text-green-600' : 'text-red-600'"
+                  :class="(trend.growth_percentage || 0) > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'"
                 >
                   {{ trend.growth_percentage ? `${trend.growth_percentage.toFixed(1)}%` : 'N/A' }}
                 </span>
@@ -174,7 +174,7 @@
           >
             <div class="flex items-center gap-3">
               <div class="flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold"
-                   :class="index === 0 ? 'bg-yellow-500 text-white' : index === 1 ? 'bg-gray-400 text-white' : index === 2 ? 'bg-orange-500 text-white' : 'bg-gray-200 text-gray-600'">
+                   :class="index === 0 ? 'bg-yellow-500 text-white' : index === 1 ? 'bg-gray-400 text-white dark:bg-gray-600' : index === 2 ? 'bg-orange-500 text-white' : 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300'">
                 {{ index + 1 }}
               </div>
               <div>
@@ -210,7 +210,7 @@
             class="flex items-center justify-between p-3 bg-muted rounded-lg"
           >
             <div class="flex items-center gap-3">
-              <div class="flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 text-white text-xs font-bold">
+              <div class="flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 dark:bg-blue-600 text-white text-xs font-bold">
                 {{ index + 1 }}
               </div>
               <div class="flex-1">
@@ -244,7 +244,7 @@
             class="flex items-center justify-between p-3 bg-muted rounded-lg"
           >
             <div class="flex items-center gap-3">
-              <div class="flex items-center justify-center w-6 h-6 rounded-full bg-green-500 text-white text-xs font-bold">
+              <div class="flex items-center justify-center w-6 h-6 rounded-full bg-green-500 dark:bg-green-600 text-white text-xs font-bold">
                 {{ index + 1 }}
               </div>
               <div class="flex-1">
@@ -264,6 +264,18 @@
         </div>
       </div>
     </div>
+
+    <!-- Profitability Metrics -->
+    <ProfitabilityMetricsCard 
+      :metrics="profitabilityMetrics" 
+      :loading="loading"
+    />
+
+    <!-- Sales Channel Analysis -->
+    <SalesChannelAnalysis 
+      :channels="channelMonthly" 
+      :loading="loading"
+    />
 
     <!-- Branch Performance (if multiple branches) -->
     <div v-if="branchStats.length > 1" class="bg-card border border-border rounded-lg p-6">
@@ -320,6 +332,8 @@ import {
   Building
 } from 'lucide-vue-next'
 import Button from '@/components/ui/Button.vue'
+import ProfitabilityMetricsCard from '@/components/dashboard/ProfitabilityMetricsCard.vue'
+import SalesChannelAnalysis from '@/components/dashboard/SalesChannelAnalysis.vue'
 
 const dashboardStore = useSalesDashboardStore()
 const companiesStore = useCompaniesStore()
@@ -335,6 +349,8 @@ const topCustomers = computed(() => dashboardStore.topCustomers)
 const salesTrendData = computed(() => dashboardStore.salesTrendData)
 const branchStats = computed(() => dashboardStore.branchStats)
 const lastRefresh = computed(() => dashboardStore.lastRefresh)
+const profitabilityMetrics = computed(() => dashboardStore.profitabilityMetrics)
+const channelMonthly = computed(() => dashboardStore.channelMonthly)
 
 // Methods
 const formatCurrency = (amount: number) => {

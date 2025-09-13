@@ -1156,8 +1156,8 @@ CREATE TABLE IF NOT EXISTS sales_docs (
   observations text,
   created_at timestamptz default now(),
   updated_at timestamptz default now(),
-  created_by uuid references auth.user(id) on delete set null,
-  updated_by uuid references auth.user(id) on delete set null,
+  created_by uuid references auth.users(id) on delete set null,
+  updated_by uuid references auth.users(id) on delete set null,
   deleted_at timestamptz,
   unique(company_id, doc_type, series, number)
 );
@@ -1282,18 +1282,22 @@ CREATE TABLE public.stock_ledger (
 
     -- Costos en moneda base de la compañia
     unit_cost_in monetary,
-    unit_cost_usd monetary,
-    unit_cost_clp monetary,
+    unit_cost_in_local monetary DEFAULT 0,
+    unit_cost_in_usd monetary DEFAULT 0,
+    unit_cost_in_clp monetary DEFAULT 0,
     
     total_cost_in monetary,
-    total_cost_usd monetary,
-    total_cost_clp monetary,
+    total_cost_in_local monetary DEFAULT 0,
+    total_cost_in_usd monetary DEFAULT 0,
+    total_cost_in_clp monetary DEFAULT 0,        
 
     unit_cost_out monetary,
+    unit_cost_out_local monetary DEFAULT 0,
     unit_cost_out_usd monetary DEFAULT 0,
     unit_cost_out_clp monetary DEFAULT 0,
     
     total_cost_out monetary,
+    total_cost_out_local monetary DEFAULT 0,
     total_cost_out_usd monetary DEFAULT 0,
     total_cost_out_clp monetary DEFAULT 0,
 

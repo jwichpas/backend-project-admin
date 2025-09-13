@@ -237,52 +237,48 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-Programación de Actualización (Usando pg_cron)
--- Actualizar todas las noches a las 2:00 AM
-SELECT cron.schedule('refresh-sales-views', '0 2 * * *', 
-    'SELECT refresh_sales_materialized_views()');
 
 -- Vista Materializada de Ventas y Ganancias Mensuales
 
 CREATE MATERIALIZED VIEW mv_sales_profit_monthly AS
 SELECT
-    company_id,
-    DATE_TRUNC('month', issue_date) AS sale_month,
-    EXTRACT(YEAR FROM issue_date) AS sale_year,
-    EXTRACT(MONTH FROM issue_date) AS sale_month_number,
-    TO_CHAR(issue_date, 'Month') AS sale_month_name,
-    COUNT(DISTINCT id) AS total_transactions,
-    COUNT(DISTINCT customer_id) AS unique_customers,
-    SUM(total) AS total_sales,
-    SUM(total_local) AS total_sales_local,
-    SUM(total_usd) AS total_sales_usd,
-    SUM(total_clp) AS total_sales_clp,
-    SUM(total_ope_gravadas) AS taxable_sales,
-    SUM(total_ope_exoneradas) AS exempt_sales,
-    SUM(total_ope_inafectas) AS non_taxable_sales,
-    SUM(total_igv) AS total_tax,
-    SUM(total_isc) AS total_excise_tax,
-    SUM(total_descuentos) AS total_discounts,
-    SUM(total_otros_cargos) AS total_other_charges,
-    -- Cálculo de ganancias (asumiendo que el costo está en otra tabla)
-    (SUM(total) - COALESCE((
-        SELECT SUM(sl.total_cost_out)
-        FROM stock_ledger sl
-        WHERE sl.company_id = sd.company_id
-        AND DATE_TRUNC('month', sl.movement_date) = DATE_TRUNC('month', sd.issue_date)
-        AND sl.operation_type = '01' -- Operaciones de venta
-    ), 0)) AS estimated_profit,
-    (SUM(total_local) - COALESCE((
-        SELECT SUM(sl.total_cost_out_local)
-        FROM stock_ledger sl
-        WHERE sl.company_id = sd.company_id
-        AND DATE_TRUNC('month', sl.movement_date) = DATE_TRUNC('month', sd.issue_date)
-        AND sl.operation_type = '01' -- Operaciones de venta
-    ), 0)) AS estimated_profit_local
+    sd.company_id,
+    DATE_TRUNC('month', sd.issue_date) AS sale_month,
+    EXTRACT(YEAR FROM DATE_TRUNC('month', sd.issue_date)) AS sale_year,
+    EXTRACT(MONTH FROM DATE_TRUNC('month', sd.issue_date)) AS sale_month_number,
+    TO_CHAR(DATE_TRUNC('month', sd.issue_date), 'Month') AS sale_month_name,
+    COUNT(DISTINCT sd.id) AS total_transactions,
+    COUNT(DISTINCT sd.customer_id) AS unique_customers,
+    SUM(sd.total) AS total_sales,
+    SUM(sd.total_local) AS total_sales_local,
+    SUM(sd.total_usd) AS total_sales_usd,
+    SUM(sd.total_clp) AS total_sales_clp,
+    SUM(sd.total_ope_gravadas) AS taxable_sales,
+    SUM(sd.total_ope_exoneradas) AS exempt_sales,
+    SUM(sd.total_ope_inafectas) AS non_taxable_sales,
+    SUM(sd.total_igv) AS total_tax,
+    SUM(sd.total_isc) AS total_excise_tax,
+    SUM(sd.total_descuentos) AS total_discounts,
+    SUM(sd.total_otros_cargos) AS total_other_charges,
+    -- Cálculo de ganancias mejorado
+    (SUM(sd.total) - COALESCE(SUM(sl.total_cost_out), 0)) AS estimated_profit,
+    (SUM(sd.total_local) - COALESCE(SUM(sl.total_cost_out_local), 0)) AS estimated_profit_local
 FROM sales_docs sd
-WHERE deleted_at IS NULL
-GROUP BY company_id, DATE_TRUNC('month', issue_date), 
-         EXTRACT(YEAR FROM issue_date), EXTRACT(MONTH FROM issue_date);
+LEFT JOIN (
+    SELECT 
+        company_id,
+        DATE_TRUNC('month', movement_date) AS movement_month,
+        SUM(total_cost_out) AS total_cost_out,
+        SUM(total_cost_out_local) AS total_cost_out_local
+    FROM stock_ledger
+    WHERE operation_type = '01'
+    GROUP BY company_id, DATE_TRUNC('month', movement_date)
+) sl ON sd.company_id = sl.company_id 
+    AND DATE_TRUNC('month', sd.issue_date) = sl.movement_month
+WHERE sd.deleted_at IS NULL
+GROUP BY 
+    sd.company_id,
+    DATE_TRUNC('month', sd.issue_date);
 
 -- Vista Materializada de Tendencia Mensual
 CREATE MATERIALIZED VIEW mv_sales_trend_monthly AS

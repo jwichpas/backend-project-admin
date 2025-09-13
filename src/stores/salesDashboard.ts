@@ -113,94 +113,64 @@ export interface SalesMonthlyTrend {
 
 export interface SalesProfitMonthly {
   company_id: string
-  company_name: string
   sale_month: string
-  sale_year: string
-  month_number: number
-  total_documents: number
+  sale_year: number
+  sale_month_number: number
+  sale_month_name: string
+  total_transactions: number
   unique_customers: number
-  unique_products: number
-  total_items_sold: number
-  sales_pen: number
-  sales_usd: number
-  sales_clp: number
-  sales_local: number
-  total_cost_local: number
-  gross_profit_local: number
-  profit_margin_percent: number
-  avg_ticket_value: number
-  total_tax_local: number
+  total_sales: number
+  total_sales_local: number
+  total_sales_usd: number
+  total_sales_clp: number
+  taxable_sales: number
+  exempt_sales: number
+  non_taxable_sales: number
+  total_tax: number
+  total_excise_tax: number
+  total_discounts: number
+  total_other_charges: number
+  estimated_profit: number
+  estimated_profit_local: number
 }
 
 export interface SalesTrendMonthly {
   company_id: string
-  company_name: string
   sale_month: string
-  sale_year: string
-  month_number: number
+  sale_year: number
+  sale_month_number: number
   monthly_sales: number
-  monthly_transactions: number
-  monthly_customers: number
-  avg_transaction_value: number
   previous_month_sales: number
-  previous_month_transactions: number
-  mom_growth_percent: number
-  same_month_last_year: number
-  yoy_growth_percent: number
-  three_month_avg: number
-  trend_deviation: number
+  previous_year_sales: number
+  month_over_month_growth: number
+  year_over_year_growth: number
 }
 
 export interface SalesChannelMonthly {
   company_id: string
-  company_name: string
   sale_month: string
-  sale_year: string
-  month_number: number
-  sales_channel: string
-  branch_id: string
-  branch_name: string
-  branch_code: string
-  seller_user_id: string
-  seller_name: string
-  seller_email: string
-  total_documents: number
+  doc_type: string
+  transaction_count: number
   unique_customers: number
+  total_sales: number
   total_sales_local: number
-  facturas_sales: number
-  boletas_sales: number
-  otros_sales: number
-  facturas_count: number
-  boletas_count: number
-  otros_count: number
-  avg_ticket_value: number
-  channel_share_percent: number
+  avg_transaction_value: number
+  total_tax: number
 }
 
 export interface ProfitabilityMetricsMonthly {
   company_id: string
-  company_name: string
   sale_month: string
-  sale_year: string
-  month_number: number
-  total_revenue: number
-  gross_sales: number
-  total_discounts: number
-  total_taxes: number
-  total_cogs: number
+  sale_year: number
+  sale_month_number: number
+  total_sales: number
+  cost_of_goods_sold: number
   gross_profit: number
-  net_profit: number
-  gross_margin_percent: number
-  net_margin_percent: number
-  roi_percent: number
-  unique_products: number
-  total_quantity_sold: number
-  unique_customers: number
-  total_transactions: number
+  gross_margin_percentage: number
+  total_taxes: number
+  total_discounts: number
+  transaction_count: number
   avg_transaction_value: number
-  avg_customer_value: number
-  avg_price_per_unit: number
-  avg_qty_per_product: number
 }
 
 export const useSalesDashboardStore = defineStore('salesDashboard', () => {
@@ -330,7 +300,7 @@ export const useSalesDashboardStore = defineStore('salesDashboard', () => {
     error.value = null
 
     try {
-      const { error: refreshError } = await supabase.rpc('refresh_enhanced_sales_materialized_views')
+      const { error: refreshError } = await supabase.rpc('refresh_all_sales_materialized_views')
       
       if (refreshError) {
         throw new Error(refreshError.message)
@@ -759,6 +729,17 @@ export const useSalesDashboardStore = defineStore('salesDashboard', () => {
     topCustomers,
     salesTrendData,
 
+    // Enhanced data
+    profitMonthly,
+    trendMonthly,
+    channelMonthly,
+    profitabilityMetrics,
+    enhancedSalesTrend,
+    profitTrendData,
+    channelPerformance,
+    currentMonthProfitability,
+    yearOverYearComparison,
+
     // Actions
     refreshMaterializedViews,
     fetchTimeStats,
@@ -767,6 +748,10 @@ export const useSalesDashboardStore = defineStore('salesDashboard', () => {
     fetchCustomerStats,
     fetchBranchStats,
     fetchMonthlyTrend,
+    fetchProfitMonthly,
+    fetchTrendMonthly,
+    fetchChannelMonthly,
+    fetchProfitabilityMetrics,
     fetchAllDashboardData,
     setDateRange,
     setBranchFilter,
