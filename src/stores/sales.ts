@@ -1346,6 +1346,159 @@ export const useSalesStore = defineStore('sales', {
       return this.salesOrders.filter(order => 
         order.status === 'APPROVED' || order.status === 'PENDING'
       )
+    },
+
+    // ========================================================================
+    // FUNCIONES ESPECÍFICAS PARA PUNTO DE VENTA
+    // ========================================================================
+
+    async createQuickShipment(salesDocId: string, cartItems: any[], companyId: string) {
+      this.loading = true
+      this.error = null
+      try {
+        // Obtener el warehouse_id predeterminado (desde localStorage o configuración)
+        const selectedBranchId = localStorage.getItem('selectedBranchId')
+        let warehouseId = localStorage.getItem('defaultWarehouseId')
+        
+        // Si no hay warehouse seleccionado, obtener el primero disponible
+        if (!warehouseId) {
+          const { data: warehouses, error: warehouseError } = await supabase
+            .from('warehouses')
+            .select('id')
+            .eq('company_id', companyId)
+            .eq('is_active', true)
+            .limit(1)
+          
+          if (warehouseError) throw warehouseError
+          if (!warehouses || warehouses.length === 0) {
+            throw new Error('No se encontró un almacén activo para crear el envío')
+          }
+          
+          warehouseId = warehouses[0].id
+        }
+
+        // Crear el shipment
+        const shipmentData = {
+          company_id: companyId,
+          warehouse_id: warehouseId,
+          sales_doc_id: salesDocId,
+          shipment_date: new Date().toISOString().split('T')[0],
+          status: 'COMPLETE',
+          vehicle_id: null, // Sin vehículo para despacho rápido
+          driver_id: null,  // Sin chofer para despacho rápido
+          notes: 'Despacho rápido desde punto de venta'
+        }
+
+        const { data: shipment, error: shipmentError } = await supabase
+          .from('shipments')
+          .insert(shipmentData)
+          .select()
+          .single()
+
+        if (shipmentError) throw shipmentError
+
+        // Crear los shipment_items
+        if (cartItems && cartItems.length > 0 && shipment) {
+          const shipmentItems = cartItems.map((item: any) => ({
+            shipment_id: shipment.id,
+            product_id: item.product.product_id,
+            quantity_shipped: item.base_quantity || item.quantity, // Usar cantidad base si está disponible
+            batch_number: null,
+            serial_number: null,
+            notes: `Vendido en ${item.selected_unit || item.product.unit_code} - Cantidad original: ${item.quantity}`
+          }))
+
+          const { error: itemsError } = await supabase
+            .from('shipment_items')
+            .insert(shipmentItems)
+
+          if (itemsError) throw itemsError
+        }
+
+        if (shipment) {
+          this.shipments.unshift(shipment)
+        }
+
+        return shipment
+      } catch (error: any) {
+        this.error = error.message
+        console.error('Error creating quick shipment:', error)
+        throw error
+      } finally {
+        this.loading = false
+      }
+    },
+
+    async createDispatchOrderForSales(salesDocIds: string[], companyId: string, vehicleId?: string, driverId?: string) {
+      this.loading = true
+      this.error = null
+      try {
+        // Obtener el warehouse_id predeterminado
+        const selectedBranchId = localStorage.getItem('selectedBranchId')
+        let warehouseId = localStorage.getItem('defaultWarehouseId')
+        
+        // Si no hay warehouse seleccionado, obtener el primero disponible
+        if (!warehouseId) {
+          const { data: warehouses, error: warehouseError } = await supabase
+            .from('warehouses')
+            .select('id')
+            .eq('company_id', companyId)
+            .eq('is_active', true)
+            .limit(1)
+          
+          if (warehouseError) throw warehouseError
+          if (!warehouses || warehouses.length === 0) {
+            throw new Error('No se encontró un almacén activo para crear la orden de despacho')
+          }
+          
+          warehouseId = warehouses[0].id
+        }
+
+        // Crear la dispatch order
+        const dispatchOrderData = {
+          company_id: companyId,
+          warehouse_id: warehouseId,
+          planned_date: new Date().toISOString().split('T')[0],
+          vehicle_id: vehicleId || null,
+          driver_id: driverId || null,
+          status: 'PENDING',
+          notes: 'Orden de despacho desde punto de venta'
+        }
+
+        const { data: dispatchOrder, error: dispatchError } = await supabase
+          .from('dispatch_orders')
+          .insert(dispatchOrderData)
+          .select()
+          .single()
+
+        if (dispatchError) throw dispatchError
+
+        // Asociar los sales_docs a la dispatch order
+        if (salesDocIds && salesDocIds.length > 0 && dispatchOrder) {
+          const salesDocsAssignments = salesDocIds.map((salesDocId: string) => ({
+            dispatch_order_id: dispatchOrder.id,
+            sales_doc_id: salesDocId
+          }))
+
+          const { error: assignmentError } = await supabase
+            .from('dispatch_order_sales_docs')
+            .insert(salesDocsAssignments)
+
+          if (assignmentError) throw assignmentError
+        }
+
+        if (dispatchOrder) {
+          this.dispatchOrders.unshift(dispatchOrder)
+        }
+
+        return dispatchOrder
+      } catch (error: any) {
+        this.error = error.message
+        console.error('Error creating dispatch order:', error)
+        throw error
+      } finally {
+        this.loading = false
+      }
     }
   }
 })

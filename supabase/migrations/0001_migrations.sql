@@ -155,6 +155,15 @@ CREATE TABLE IF NOT EXISTS sunat.tab_12_tipo_operacion (
 
 -- PASO 4: SISTEMA DE ROLES Y PERMISOS (JSONB OPTIMIZADO, FUSIONADO)
 -- ============================================================================
+create table public.profiles (
+  id uuid not null references auth.users on delete cascade,
+  first_name text,
+  last_name text,
+  image_path text, 
+  primary key (id)
+);
+alter table public.profiles enable row level security;
+
 
 CREATE TABLE public.roles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -567,6 +576,59 @@ CREATE INDEX idx_categories_company ON categories(company_id);
 
 CREATE TRIGGER update_products_updated_at BEFORE UPDATE ON products FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
 
+-- tabla almacenará las relaciones de conversión entre unidades para cada producto.
+CREATE TABLE public.product_unit_conversions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    from_unit VARCHAR(10) NOT NULL REFERENCES sunat.cat_03_unidades_medida(code),
+    to_unit VARCHAR(10) NOT NULL REFERENCES sunat.cat_03_unidades_medida(code),
+    conversion_factor NUMERIC(18,6) NOT NULL CHECK (conversion_factor > 0),
+    
+    -- Restricciones para evitar duplicados y ciclos
+    CONSTRAINT uq_conversion_unique_direction UNIQUE (product_id, from_unit, to_unit),
+    CONSTRAINT chk_no_same_unit CHECK (from_unit <> to_unit),
+    
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX idx_product_unit_conversions_product 
+ON product_unit_conversions(product_id);
+
+CREATE INDEX idx_product_unit_conversions_units 
+ON product_unit_conversions(from_unit, to_unit);
+-- =========== función de conversión ===========
+-- Para facilitar las conversiones en consultas
+CREATE OR REPLACE FUNCTION public.convert_unit(
+    p_product_id UUID,
+    p_from_unit VARCHAR(10),
+    p_to_unit VARCHAR(10),
+    p_quantity NUMERIC
+) RETURNS NUMERIC AS $$
+DECLARE
+    v_factor NUMERIC;
+BEGIN
+    -- Buscar conversión directa o inversa
+    SELECT 
+        CASE 
+            WHEN from_unit = p_from_unit THEN conversion_factor
+            ELSE 1/conversion_factor 
+        END
+    INTO v_factor
+    FROM product_unit_conversions
+    WHERE 
+        product_id = p_product_id AND
+        ((from_unit = p_from_unit AND to_unit = p_to_unit) OR
+         (from_unit = p_to_unit AND to_unit = p_from_unit));
+    
+    -- Si no se encuentra conversión, devolver null
+    IF NOT FOUND THEN
+        RETURN NULL;
+    END IF;
+    
+    RETURN p_quantity * v_factor;
+END;
+$$ LANGUAGE plpgsql;
+
 -- Otras tablas relacionadas con productos 
 CREATE TABLE IF NOT EXISTS product_images (
   id uuid primary key default gen_random_uuid(),
@@ -810,7 +872,8 @@ CREATE INDEX idx_vehicle_logs_reported_at ON vehicle_position_logs(reported_at);
 CREATE TABLE IF NOT EXISTS drivers (
   id uuid primary key default gen_random_uuid(),
   company_id uuid not null references companies(id) on delete cascade,
-  party_id uuid not null references parties(id) on delete restrict,
+  /* party_id uuid not null references parties(id) on delete restrict, */
+  user_id uuid not null references auth.users(id) on delete restrict,
   license_number text not null,
   license_class text,
   valid_until date,
@@ -1093,6 +1156,8 @@ CREATE TABLE IF NOT EXISTS sales_docs (
   observations text,
   created_at timestamptz default now(),
   updated_at timestamptz default now(),
+  created_by uuid references auth.user(id) on delete set null,
+  updated_by uuid references auth.user(id) on delete set null,
   deleted_at timestamptz,
   unique(company_id, doc_type, series, number)
 );

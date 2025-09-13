@@ -52,9 +52,9 @@
               <!-- Sales Submenu -->
               <div v-if="salesMenuOpen && !isCollapsed" class="mt-1 space-y-1 pl-6">
                 <router-link
-                  to="/sales"
+                  to="/sales/dashboard"
                   class="block rounded-md px-3 py-2 text-sm transition-colors"
-                  :class="getSubmenuClass('/sales')"
+                  :class="getSubmenuClass('/sales/dashboard')"
                 >
                   Dashboard de Ventas
                 </router-link>
@@ -226,6 +226,48 @@
           <!-- Logistics Section -->
           <li class="mt-6">
             <p v-if="!isCollapsed" class="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Logística</p>
+          </li>
+          <li>
+            <div class="relative">
+              <button
+                @click="toggleVehiclesMenu"
+                class="group flex items-center w-full rounded-md px-3 py-2 text-sm font-medium transition-colors"
+                :class="getNavClass('/vehicles')"
+              >
+                <Car class="mr-3 h-5 w-5 transition-colors" :class="getIconClass('/vehicles')" />
+                <span v-if="!isCollapsed" class="flex-1 text-left">Vehículos y Conductores</span>
+                <ChevronDown
+                  v-if="!isCollapsed"
+                  class="h-4 w-4 transition-transform"
+                  :class="{ 'rotate-180': vehiclesMenuOpen }"
+                />
+              </button>
+
+              <!-- Vehicles Submenu -->
+              <div v-if="vehiclesMenuOpen && !isCollapsed" class="mt-1 space-y-1 pl-6">
+                <router-link
+                  to="/vehicles"
+                  class="block rounded-md px-3 py-2 text-sm transition-colors"
+                  :class="getSubmenuClass('/vehicles')"
+                >
+                  Lista de Vehículos
+                </router-link>
+                <router-link
+                  to="/vehicles/drivers"
+                  class="block rounded-md px-3 py-2 text-sm transition-colors"
+                  :class="getSubmenuClass('/vehicles/drivers')"
+                >
+                  Conductores
+                </router-link>
+                <router-link
+                  to="/vehicles/tracking"
+                  class="block rounded-md px-3 py-2 text-sm transition-colors"
+                  :class="getSubmenuClass('/vehicles/tracking')"
+                >
+                  Seguimiento GPS
+                </router-link>
+              </div>
+            </div>
           </li>
           <li>
             <router-link to="/map" class="group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors" :class="getNavClass('/map')">
@@ -452,7 +494,7 @@ import { useAuthStore } from '@/stores/auth'
 import {
   Menu, LayoutDashboard, Settings, Moon, Sun, User,
   Receipt, Users, ShoppingCart, Truck, Package, Warehouse, BarChart3,
-  Building, MapPin, FileText, ChevronDown, Bell, DollarSign, CreditCard
+  Building, MapPin, FileText, ChevronDown, Bell, DollarSign, CreditCard, Car
 } from 'lucide-vue-next'
 import Select from '@/components/ui/Select.vue'
 import { supabase } from '@/lib/supabase'
@@ -485,6 +527,7 @@ const userMenuOpen = ref(false)
 const productsMenuOpen = ref(false)
 const salesMenuOpen = ref(false)
 const purchasesMenuOpen = ref(false)
+const vehiclesMenuOpen = ref(false)
 const notificationsOpen = ref(false)
 const exchangeRates = ref<ExchangeRate[]>([])
 const notifications = ref<Notification[]>([])
@@ -493,6 +536,7 @@ const toggleCollapse = () => { isCollapsed.value = !isCollapsed.value }
 const toggleProductsMenu = () => { productsMenuOpen.value = !productsMenuOpen.value }
 const toggleSalesMenu = () => { salesMenuOpen.value = !salesMenuOpen.value }
 const togglePurchasesMenu = () => { purchasesMenuOpen.value = !purchasesMenuOpen.value }
+const toggleVehiclesMenu = () => { vehiclesMenuOpen.value = !vehiclesMenuOpen.value }
 const toggleNotifications = () => { notificationsOpen.value = !notificationsOpen.value }
 
 // Company and Branch selection
@@ -579,6 +623,9 @@ const getPageTitle = () => {
     'inventory': 'Inventario',
     'customers': 'Clientes',
     'suppliers': 'Proveedores',
+    'vehicles': 'Vehículos',
+    'vehicles-drivers': 'Conductores',
+    'vehicles-tracking': 'Seguimiento GPS',
     'map': 'Mapa',
     'reports': 'Reportes',
     'companies': 'Empresas',
@@ -712,6 +759,10 @@ watch(route, (newRoute) => {
   // Auto-open purchases menu when visiting purchases routes
   if (newRoute.path.startsWith('/purchases')) {
     purchasesMenuOpen.value = true
+  }
+  // Auto-open vehicles menu when visiting vehicles routes
+  if (newRoute.path.startsWith('/vehicles')) {
+    vehiclesMenuOpen.value = true
   }
 }, { immediate: true })
 

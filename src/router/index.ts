@@ -87,6 +87,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/sales/dashboard',
+      name: 'sales-dashboard',
+      component: () => import('../views/Sales/SalesDashboardView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/pos',
       name: 'pos',
       component: () => import('../views/Sales/PointOfSaleView.vue'),
@@ -133,6 +139,25 @@ const router = createRouter({
       path: '/suppliers',
       name: 'suppliers',  
       component: () => import('../views/SuppliersView.vue'),
+      meta: { requiresAuth: true }
+    },
+    // Vehicles module with nested routes
+    {
+      path: '/vehicles',
+      name: 'vehicles',
+      component: () => import('../views/Vehicles/VehiclesView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/vehicles/drivers',
+      name: 'vehicles-drivers',
+      component: () => import('../views/Vehicles/DriversView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/vehicles/tracking',
+      name: 'vehicles-tracking',
+      component: () => import('../views/Vehicles/VehicleTrackingView.vue'),
       meta: { requiresAuth: true }
     },
     {
