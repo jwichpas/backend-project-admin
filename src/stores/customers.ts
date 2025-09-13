@@ -109,7 +109,7 @@ export const useCustomersStore = defineStore('customers', () => {
         `)
         .eq('company_id', companyId)
         .eq('is_customer', true)
-        .eq('deleted_at', null)
+        .is('deleted_at', null)
         .order('created_at', { ascending: false })
 
       if (fetchError) throw fetchError
@@ -122,7 +122,7 @@ export const useCustomersStore = defineStore('customers', () => {
           .select('total, issue_date')
           .eq('company_id', companyId)
           .eq('customer_id', customer.id)
-          .eq('deleted_at', null)
+          .is('deleted_at', null)
 
         if (salesError) {
           console.warn('Error fetching sales data for customer:', customer.id, salesError)
@@ -324,7 +324,7 @@ export const useCustomersStore = defineStore('customers', () => {
         .from('party_contacts')
         .select('*')
         .eq('party_id', customerId)
-        .eq('deleted_at', null)
+        .is('deleted_at', null)
         .order('created_at', { ascending: false })
 
       if (fetchError) throw fetchError
@@ -355,7 +355,7 @@ export const useCustomersStore = defineStore('customers', () => {
         `)
         .eq('company_id', companyId)
         .eq('is_customer', true)
-        .eq('deleted_at', null)
+        .is('deleted_at', null)
         .or(`fullname.ilike.%${query}%,doc_number.ilike.%${query}%,email.ilike.%${query}%`)
         .limit(10)
 

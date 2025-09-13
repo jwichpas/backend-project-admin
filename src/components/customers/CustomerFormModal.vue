@@ -1,5 +1,5 @@
 <template>
-  <Dialog v-model="isOpen">
+  <Dialog :open="isOpen" @update:open="(open) => isOpen = open">
     <DialogContent class="max-w-2xl max-h-[90vh] overflow-y-auto">
       <DialogHeader>
         <DialogTitle>

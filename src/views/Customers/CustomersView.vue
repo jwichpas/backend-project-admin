@@ -197,7 +197,7 @@
     </div>
 
     <!-- Customer Details Modal -->
-    <Dialog v-model="showDetailsModal">
+    <Dialog :open="showDetailsModal" @update:open="(open) => showDetailsModal = open">
       <DialogContent class="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Detalles del Cliente</DialogTitle>
