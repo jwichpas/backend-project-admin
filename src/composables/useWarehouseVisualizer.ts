@@ -32,15 +32,36 @@ export function useWarehouseVisualizer() {
 
   // Computed properties
   const selectedWarehouseData = computed(() => {
-    if (!selectedWarehouse.value) return null
+    if (!selectedWarehouse.value) {
+      // If no warehouse is selected, use the first available warehouse
+      if (warehouses.value.length > 0) {
+        const firstWarehouse = warehouses.value[0]
+        const warehouseZones = zones.value.filter(z => z.warehouse_id === firstWarehouse.id)
+        const warehouseLocations = locations.value.filter(l => 
+          !l.warehouse_zone_id || warehouseZones.some(z => z.id === l.warehouse_zone_id)
+        )
+        
+        console.log('🎨 Using first warehouse as default:', firstWarehouse.name, 'with', warehouseLocations.length, 'locations')
+        
+        return {
+          warehouse: { ...firstWarehouse, zones: warehouseZones },
+          locations: warehouseLocations,
+          zones: warehouseZones
+        } as WarehouseVisualizerData
+      }
+      return null
+    }
     
     const warehouse = warehouses.value.find(w => w.id === selectedWarehouse.value)
     if (!warehouse) return null
 
     const warehouseZones = zones.value.filter(z => z.warehouse_id === warehouse.id)
+    // Include locations that either have no zone assigned OR belong to this warehouse's zones
     const warehouseLocations = locations.value.filter(l => 
-      warehouseZones.some(z => z.id === l.warehouse_zone_id)
+      !l.warehouse_zone_id || warehouseZones.some(z => z.id === l.warehouse_zone_id)
     )
+
+    console.log('🎯 Selected warehouse data for:', warehouse.name, 'zones:', warehouseZones.length, 'locations:', warehouseLocations.length)
 
     return {
       warehouse: { ...warehouse, zones: warehouseZones },
@@ -239,12 +260,16 @@ export function useWarehouseVisualizer() {
 
       if (warehouseId) {
         selectedWarehouse.value = warehouseId
+        console.log('🎯 Selected warehouse set to:', warehouseId)
       } else if (warehouses.value.length > 0) {
         selectedWarehouse.value = warehouses.value[0].id
+        console.log('🎯 Auto-selected first warehouse:', warehouses.value[0].name, warehouses.value[0].id)
+      } else {
+        console.log('⚠️ No warehouses available to select')
       }
     } catch (err: any) {
       error.value = err.message
-      console.error('Error initializing data:', err)
+      console.error('❌ Error initializing data:', err)
     } finally {
       loading.value = false
     }

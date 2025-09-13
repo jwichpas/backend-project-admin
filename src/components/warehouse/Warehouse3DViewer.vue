@@ -414,10 +414,27 @@ const getLocationColor = (location: LocationWithProduct): THREE.Color => {
 }
 
 const get3DPosition = (location: LocationWithProduct) => {
+  const index = props.locations.findIndex(l => l.id === location.id)
+  const bounds = props.warehouseBounds || { width: 100, height: 20, length: 80 }
+  
+  let x = location.position_x
+  let z = location.position_y
+  
+  // Auto-position if no coordinates are set
+  if (x === null || x === undefined || z === null || z === undefined) {
+    const cols = Math.ceil(Math.sqrt(props.locations.length))
+    const spacingX = bounds.width / (cols + 1)
+    const rows = Math.ceil(props.locations.length / cols)
+    const spacingZ = bounds.length / (rows + 1)
+    
+    x = spacingX + (index % cols) * spacingX
+    z = spacingZ + Math.floor(index / cols) * spacingZ
+  }
+  
   return {
-    x: location.position_x || 0,
+    x: x || 0,
     y: Math.max(location.position_z || 0, getLocationRadius(location)), // Ensure objects are above ground
-    z: location.position_y || 0
+    z: z || 0
   }
 }
 

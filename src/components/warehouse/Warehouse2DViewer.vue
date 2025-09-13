@@ -132,10 +132,10 @@
           </g>
 
           <!-- Product locations -->
-          <g v-for="location in locations" :key="location.id" class="location-group">
+          <g v-for="(location, index) in locations" :key="location.id" class="location-group">
             <circle
-              :cx="location.position_x || 0"
-              :cy="location.position_y || 0"
+              :cx="getLocationX(location, index)"
+              :cy="getLocationY(location, index)"
               :r="getLocationRadius(location)"
               :fill="getLocationColor(location)"
               :stroke="selectedLocation?.id === location.id ? '#ef4444' : getLocationStrokeColor(location)"
@@ -147,8 +147,8 @@
             <!-- Stock indicator -->
             <text
               v-if="location.stock_actual > 0"
-              :x="location.position_x || 0"
-              :y="(location.position_y || 0) + 1"
+              :x="getLocationX(location, index)"
+              :y="getLocationY(location, index) + 1"
               text-anchor="middle"
               dominant-baseline="middle"
               font-size="6"
@@ -163,8 +163,8 @@
           <!-- Highlight selected location -->
           <g v-if="selectedLocation" class="selection-highlight">
             <circle
-              :cx="selectedLocation.position_x || 0"
-              :cy="selectedLocation.position_y || 0"
+              :cx="getLocationX(selectedLocation, locations.findIndex(l => l.id === selectedLocation.id))"
+              :cy="getLocationY(selectedLocation, locations.findIndex(l => l.id === selectedLocation.id))"
               :r="getLocationRadius(selectedLocation) + 3"
               fill="none"
               stroke="#ef4444"
@@ -342,6 +342,29 @@ const getLocationStrokeColor = (location: LocationWithProduct) => {
     return '#D97706'
   }
   return '#2563EB'
+}
+
+const getLocationX = (location: LocationWithProduct, index: number) => {
+  if (location.position_x !== null && location.position_x !== undefined) {
+    return location.position_x
+  }
+  // Auto-position if no coordinates are set
+  const bounds = props.warehouseBounds || { width: 100, length: 100 }
+  const cols = Math.ceil(Math.sqrt(props.locations.length))
+  const spacing = bounds.width / (cols + 1)
+  return spacing + (index % cols) * spacing
+}
+
+const getLocationY = (location: LocationWithProduct, index: number) => {
+  if (location.position_y !== null && location.position_y !== undefined) {
+    return location.position_y
+  }
+  // Auto-position if no coordinates are set
+  const bounds = props.warehouseBounds || { width: 100, length: 100 }
+  const cols = Math.ceil(Math.sqrt(props.locations.length))
+  const rows = Math.ceil(props.locations.length / cols)
+  const spacing = bounds.length / (rows + 1)
+  return spacing + Math.floor(index / cols) * spacing
 }
 
 const selectLocation = (location: LocationWithProduct) => {
