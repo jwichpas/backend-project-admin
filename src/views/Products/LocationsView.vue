@@ -5,10 +5,41 @@
       <div>
         <h1 class="text-3xl font-bold text-foreground">Ubicaciones de Productos</h1>
         <p class="text-muted-foreground">
-          Gestiona las ubicaciones físicas de los productos en almacenes
+          Visualiza y gestiona las ubicaciones físicas de los productos en almacenes
         </p>
       </div>
       <div class="flex items-center gap-3">
+        <!-- View mode selector -->
+        <div class="flex items-center bg-gray-100 rounded-lg p-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            :class="{ 'bg-white shadow-sm': viewMode === 'table' }"
+            @click="setViewMode('table')"
+          >
+            <List class="h-4 w-4 mr-1" />
+            Tabla
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            :class="{ 'bg-white shadow-sm': viewMode === '2d' }"
+            @click="setViewMode('2d')"
+          >
+            <Map class="h-4 w-4 mr-1" />
+            Vista 2D
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            :class="{ 'bg-white shadow-sm': viewMode === '3d' }"
+            @click="setViewMode('3d')"
+          >
+            <Box class="h-4 w-4 mr-1" />
+            Vista 3D
+          </Button>
+        </div>
+        
         <Button variant="outline" size="sm" @click="showCreateDialog = true">
           <Plus class="mr-2 h-4 w-4" />
           Nueva Ubicación
@@ -16,185 +47,157 @@
       </div>
     </div>
 
-    <!-- Filters -->
-    <Card>
-      <CardContent class="p-6">
-        <div class="grid gap-4 md:grid-cols-4">
-          <div>
-            <label class="text-sm font-medium">Buscar Producto</label>
-            <Input 
-              v-model="searchTerm" 
-              placeholder="Nombre o SKU del producto..."
-              class="mt-1"
-            />
-          </div>
-          <div>
-            <label class="text-sm font-medium">Almacén</label>
-            <select 
-              v-model="selectedWarehouse"
-              class="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <option value="">Todos los almacenes</option>
-              <option 
-                v-for="warehouse in productsStore.warehouses" 
-                :key="warehouse.id" 
-                :value="warehouse.id"
-              >
-                {{ warehouse.name }}
-              </option>
-            </select>
-          </div>
-          <div>
-            <label class="text-sm font-medium">Zona</label>
-            <select 
-              v-model="selectedZone"
-              class="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <option value="">Todas las zonas</option>
-              <option 
-                v-for="zone in filteredZones" 
-                :key="zone.id" 
-                :value="zone.id"
-              >
-                {{ zone.code }} - {{ zone.name }}
-              </option>
-            </select>
-          </div>
-          <div>
-            <label class="text-sm font-medium">Solo Principales</label>
-            <div class="mt-2">
-              <input
-                id="principal-only"
-                type="checkbox"
-                v-model="principalOnly"
-                class="rounded border-gray-300"
-              />
-              <label for="principal-only" class="ml-2 text-sm">
-                Solo ubicaciones principales
-              </label>
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+    <!-- Enhanced Search and Filters -->
+    <WarehouseSearchFilters
+      :warehouses="warehouseVisualizer.warehouses.value"
+      :zones="warehouseVisualizer.zones.value"
+      @filters-changed="onFiltersChanged"
+      @warehouse-selected="onWarehouseSelected"
+      @product-searched="onProductSearched"
+    />
 
-    <!-- Locations Table -->
-    <Card>
-      <CardHeader>
-        <CardTitle class="flex items-center justify-between">
-          <span>Ubicaciones ({{ filteredLocations.length }})</span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent class="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Producto</TableHead>
-              <TableHead>SKU</TableHead>
-              <TableHead>Almacén</TableHead>
-              <TableHead>Zona</TableHead>
-              <TableHead>Posición</TableHead>
-              <TableHead>Capacidad</TableHead>
-              <TableHead>Stock Actual</TableHead>
-              <TableHead>Principal</TableHead>
-              <TableHead>Estado</TableHead>
-              <TableHead class="text-right">Acciones</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow v-if="productsStore.loading">
-              <TableCell colspan="10" class="text-center py-8">
-                <div class="flex items-center justify-center">
-                  <Loader2 class="h-6 w-6 animate-spin mr-2" />
-                  Cargando ubicaciones...
-                </div>
-              </TableCell>
-            </TableRow>
-            <TableRow v-else-if="filteredLocations.length === 0">
-              <TableCell colspan="10" class="text-center py-8 text-muted-foreground">
-                No se encontraron ubicaciones
-              </TableCell>
-            </TableRow>
-            <TableRow v-else v-for="location in filteredLocations" :key="location.id">
-              <TableCell>
-                <div class="flex items-center gap-3">
-                  <div class="h-8 w-8 rounded-md bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center">
-                    <MapPin class="h-4 w-4 text-white" />
+    <!-- Main Content Area -->
+    <div class="min-h-[600px]">
+      <!-- Table View -->
+      <Card v-if="viewMode === 'table'">
+        <CardHeader>
+          <CardTitle class="flex items-center justify-between">
+            <span>Ubicaciones ({{ warehouseVisualizer.filteredLocations.value.length }})</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent class="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Producto</TableHead>
+                <TableHead>SKU</TableHead>
+                <TableHead>Almacén</TableHead>
+                <TableHead>Zona</TableHead>
+                <TableHead>Posición</TableHead>
+                <TableHead>Capacidad</TableHead>
+                <TableHead>Stock Actual</TableHead>
+                <TableHead>Principal</TableHead>
+                <TableHead>Estado</TableHead>
+                <TableHead class="text-right">Acciones</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow v-if="warehouseVisualizer.loading.value">
+                <TableCell colspan="10" class="text-center py-8">
+                  <div class="flex items-center justify-center">
+                    <Loader2 class="h-6 w-6 animate-spin mr-2" />
+                    Cargando ubicaciones...
                   </div>
-                  <div>
-                    <p class="font-medium">{{ getProductName(location.product_id) }}</p>
+                </TableCell>
+              </TableRow>
+              <TableRow v-else-if="warehouseVisualizer.filteredLocations.value.length === 0">
+                <TableCell colspan="10" class="text-center py-8 text-muted-foreground">
+                  No se encontraron ubicaciones
+                </TableCell>
+              </TableRow>
+              <TableRow v-else v-for="location in warehouseVisualizer.filteredLocations.value" :key="location.id">
+                <TableCell>
+                  <div class="flex items-center gap-3">
+                    <div class="h-8 w-8 rounded-md bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center">
+                      <MapPin class="h-4 w-4 text-white" />
+                    </div>
+                    <div>
+                      <p class="font-medium">{{ location.product?.name || 'Sin nombre' }}</p>
+                    </div>
                   </div>
-                </div>
-              </TableCell>
-              <TableCell>
-                <code class="bg-muted px-2 py-1 rounded text-sm">
-                  {{ getProductSKU(location.product_id) }}
-                </code>
-              </TableCell>
-              <TableCell>{{ getWarehouseName(location) }}</TableCell>
-              <TableCell>{{ getZoneName(location.warehouse_zone_id) }}</TableCell>
-              <TableCell>
-                <div class="font-mono text-sm">
-                  <span v-if="location.position_x !== null && location.position_y !== null">
-                    X:{{ location.position_x }}, Y:{{ location.position_y }}
-                    <span v-if="location.position_z !== null">, Z:{{ location.position_z }}</span>
+                </TableCell>
+                <TableCell>
+                  <code class="bg-muted px-2 py-1 rounded text-sm">
+                    {{ location.product?.sku || '-' }}
+                  </code>
+                </TableCell>
+                <TableCell>{{ getWarehouseName(location) }}</TableCell>
+                <TableCell>{{ location.zone?.name || '-' }}</TableCell>
+                <TableCell>
+                  <div class="font-mono text-sm">
+                    <span v-if="location.position_x !== null && location.position_y !== null">
+                      X:{{ location.position_x }}, Y:{{ location.position_y }}
+                      <span v-if="location.position_z !== null">, Z:{{ location.position_z }}</span>
+                    </span>
+                    <span v-else class="text-muted-foreground">-</span>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <span v-if="location.capacity_max">
+                    {{ location.capacity_max }} unidades
                   </span>
-                  <span v-else class="text-muted-foreground">-</span>
-                </div>
-              </TableCell>
-              <TableCell>
-                <span v-if="location.capacity_max">
-                  {{ location.capacity_max }} unidades
-                </span>
-                <span v-else class="text-muted-foreground">Sin límite</span>
-              </TableCell>
-              <TableCell>
-                <div class="flex items-center gap-2">
-                  <span class="font-medium">{{ location.stock_actual }}</span>
-                  <Badge 
-                    v-if="location.capacity_max && location.stock_actual >= location.capacity_max" 
-                    variant="warning" 
-                    class="text-xs"
-                  >
-                    Lleno
+                  <span v-else class="text-muted-foreground">Sin límite</span>
+                </TableCell>
+                <TableCell>
+                  <div class="flex items-center gap-2">
+                    <span class="font-medium">{{ location.stock_actual }}</span>
+                    <Badge 
+                      v-if="location.capacity_max && location.stock_actual >= location.capacity_max" 
+                      variant="warning" 
+                      class="text-xs"
+                    >
+                      Lleno
+                    </Badge>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <Badge :variant="location.es_principal ? 'success' : 'outline'">
+                    {{ location.es_principal ? 'Principal' : 'Secundaria' }}
                   </Badge>
-                </div>
-              </TableCell>
-              <TableCell>
-                <Badge :variant="location.es_principal ? 'success' : 'outline'">
-                  {{ location.es_principal ? 'Principal' : 'Secundaria' }}
-                </Badge>
-              </TableCell>
-              <TableCell>
-                <Badge :variant="location.estado ? 'success' : 'outline'">
-                  {{ location.estado ? 'Activa' : 'Inactiva' }}
-                </Badge>
-              </TableCell>
-              <TableCell class="text-right">
-                <div class="flex items-center justify-end gap-1">
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    class="h-8 w-8"
-                    @click="editLocation(location)"
-                  >
-                    <Edit class="h-4 w-4" />
-                  </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    class="h-8 w-8 text-destructive hover:text-destructive"
-                    @click="deleteLocation(location)"
-                  >
-                    <Trash2 class="h-4 w-4" />
-                  </Button>
-                </div>
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
+                </TableCell>
+                <TableCell>
+                  <Badge :variant="location.estado ? 'success' : 'outline'">
+                    {{ location.estado ? 'Activa' : 'Inactiva' }}
+                  </Badge>
+                </TableCell>
+                <TableCell class="text-right">
+                  <div class="flex items-center justify-end gap-1">
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      class="h-8 w-8"
+                      @click="editLocation(location)"
+                    >
+                      <Edit class="h-4 w-4" />
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      class="h-8 w-8 text-destructive hover:text-destructive"
+                      @click="deleteLocation(location)"
+                    >
+                      <Trash2 class="h-4 w-4" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <!-- 2D View -->
+      <Warehouse2DViewer
+        v-else-if="viewMode === '2d'"
+        :locations="warehouseVisualizer.filteredLocations.value"
+        :zones="warehouseVisualizer.zones.value.filter(z => !warehouseVisualizer.selectedWarehouse.value || z.warehouse_id === warehouseVisualizer.selectedWarehouse.value)"
+        :warehouse-bounds="warehouseVisualizer.warehouseBounds.value"
+        :search-query="searchQuery"
+        @location-selected="onLocationSelected"
+        @zone-selected="onZoneSelected"
+      />
+
+      <!-- 3D View -->
+      <Warehouse3DViewer
+        v-else-if="viewMode === '3d'"
+        :locations="warehouseVisualizer.filteredLocations.value"
+        :zones="warehouseVisualizer.zones.value.filter(z => !warehouseVisualizer.selectedWarehouse.value || z.warehouse_id === warehouseVisualizer.selectedWarehouse.value)"
+        :warehouse-bounds="warehouseVisualizer.warehouseBounds.value"
+        :search-query="searchQuery"
+        @location-selected="onLocationSelected"
+        @zone-selected="onZoneSelected"
+      />
+    </div>
 
     <!-- Create/Edit Location Dialog -->
     <Dialog v-model:open="showCreateDialog">
@@ -216,7 +219,7 @@
               >
                 <option value="">Seleccionar producto</option>
                 <option 
-                  v-for="product in productsStore.products" 
+                  v-for="product in warehouseVisualizer.products.value" 
                   :key="product.id" 
                   :value="product.id"
                 >
@@ -233,7 +236,7 @@
               >
                 <option value="">Sin zona específica</option>
                 <option 
-                  v-for="zone in productsStore.warehouseZones" 
+                  v-for="zone in warehouseVisualizer.zones.value" 
                   :key="zone.id" 
                   :value="zone.id"
                 >
@@ -247,7 +250,7 @@
             <div>
               <label class="text-sm font-medium">Posición X</label>
               <Input
-                v-model.number="locationForm.position_x"
+                v-model="locationForm.position_x"
                 type="number"
                 step="0.01"
                 placeholder="0.00"
@@ -257,7 +260,7 @@
             <div>
               <label class="text-sm font-medium">Posición Y</label>
               <Input
-                v-model.number="locationForm.position_y"
+                v-model="locationForm.position_y"
                 type="number"
                 step="0.01"
                 placeholder="0.00"
@@ -267,7 +270,7 @@
             <div>
               <label class="text-sm font-medium">Posición Z (Altura)</label>
               <Input
-                v-model.number="locationForm.position_z"
+                v-model="locationForm.position_z"
                 type="number"
                 step="0.01"
                 placeholder="0.00"
@@ -280,7 +283,7 @@
             <div>
               <label class="text-sm font-medium">Capacidad Máxima</label>
               <Input
-                v-model.number="locationForm.capacity_max"
+                v-model="locationForm.capacity_max"
                 type="number"
                 step="0.01"
                 placeholder="Sin límite"
@@ -290,7 +293,7 @@
             <div>
               <label class="text-sm font-medium">Stock Actual</label>
               <Input
-                v-model.number="locationForm.stock_actual"
+                v-model="locationForm.stock_actual"
                 type="number"
                 step="0.01"
                 placeholder="0"
@@ -327,7 +330,7 @@
             <Button type="button" variant="outline" @click="cancelForm">
               Cancelar
             </Button>
-            <Button type="submit" :disabled="productsStore.loading">
+            <Button type="submit" :disabled="warehouseVisualizer.loading.value">
               {{ editingLocation ? 'Actualizar' : 'Crear' }}
             </Button>
           </DialogFooter>
@@ -341,8 +344,14 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useCompanyStore } from '@/stores/company'
 import { useProductsStore, type ProductLocation } from '@/stores/products'
+import { useWarehouseVisualizer, type LocationWithProduct } from '@/composables/useWarehouseVisualizer'
 import { supabase } from '@/lib/supabase'
-import { Plus, MapPin, Edit, Trash2, Loader2 } from 'lucide-vue-next'
+import { Plus, MapPin, Edit, Trash2, Loader2, List, Map, Box } from 'lucide-vue-next'
+
+// Components
+import WarehouseSearchFilters from '@/components/warehouse/WarehouseSearchFilters.vue'
+import Warehouse2DViewer from '@/components/warehouse/Warehouse2DViewer.vue'
+import Warehouse3DViewer from '@/components/warehouse/Warehouse3DViewer.vue'
 
 // UI Components
 import Button from '@/components/ui/Button.vue'
@@ -366,14 +375,13 @@ import TableCell from '@/components/ui/TableCell.vue'
 
 const companyStore = useCompanyStore()
 const productsStore = useProductsStore()
+const warehouseVisualizer = useWarehouseVisualizer()
 
 // State
-const searchTerm = ref('')
-const selectedWarehouse = ref('')
-const selectedZone = ref('')
-const principalOnly = ref(false)
+const viewMode = ref<'table' | '2d' | '3d'>('table')
+const searchQuery = ref('')
 const showCreateDialog = ref(false)
-const editingLocation = ref<ProductLocation | null>(null)
+const editingLocation = ref<LocationWithProduct | null>(null)
 const locationForm = ref({
   product_id: '',
   warehouse_zone_id: '',
@@ -386,74 +394,48 @@ const locationForm = ref({
   estado: true
 })
 
-// Computed
-const filteredZones = computed(() => {
-  if (!selectedWarehouse.value) return productsStore.warehouseZones
-  return productsStore.warehouseZones.filter(zone => zone.warehouse_id === selectedWarehouse.value)
-})
-
-const filteredLocations = computed(() => {
-  let locations = productsStore.productLocations
-
-  if (searchTerm.value) {
-    const term = searchTerm.value.toLowerCase()
-    locations = locations.filter(location => {
-      const product = productsStore.products.find(p => p.id === location.product_id)
-      return product && (
-        product.name.toLowerCase().includes(term) ||
-        product.sku.toLowerCase().includes(term)
-      )
-    })
-  }
-
-  if (selectedWarehouse.value) {
-    // Filter by warehouse through zones
-    const warehouseZoneIds = productsStore.warehouseZones
-      .filter(zone => zone.warehouse_id === selectedWarehouse.value)
-      .map(zone => zone.id)
-    
-    locations = locations.filter(location => 
-      location.warehouse_zone_id && warehouseZoneIds.includes(location.warehouse_zone_id)
-    )
-  }
-
-  if (selectedZone.value) {
-    locations = locations.filter(location => location.warehouse_zone_id === selectedZone.value)
-  }
-
-  if (principalOnly.value) {
-    locations = locations.filter(location => location.es_principal)
-  }
-
-  return locations
-})
-
 // Methods
-const getProductName = (productId: string): string => {
-  return productsStore.products.find(p => p.id === productId)?.name || 'Producto no encontrado'
+const setViewMode = (mode: 'table' | '2d' | '3d') => {
+  viewMode.value = mode
+  warehouseVisualizer.setViewMode(mode)
 }
 
-const getProductSKU = (productId: string): string => {
-  return productsStore.products.find(p => p.id === productId)?.sku || '-'
+const onFiltersChanged = (filters: any) => {
+  // Apply filters through the visualizer
+  warehouseVisualizer.setSearchQuery(filters.productQuery || '')
+  if (filters.warehouseId) {
+    warehouseVisualizer.setSelectedWarehouse(filters.warehouseId)
+  }
+  // Add more filter logic as needed
 }
 
-const getWarehouseName = (location: ProductLocation): string => {
+const onWarehouseSelected = (warehouseId: string) => {
+  warehouseVisualizer.setSelectedWarehouse(warehouseId || null)
+}
+
+const onProductSearched = (query: string) => {
+  searchQuery.value = query
+  warehouseVisualizer.setSearchQuery(query)
+}
+
+const onLocationSelected = (location: LocationWithProduct) => {
+  console.log('Location selected:', location)
+}
+
+const onZoneSelected = (zone: any) => {
+  console.log('Zone selected:', zone)
+}
+
+const getWarehouseName = (location: LocationWithProduct): string => {
   if (!location.warehouse_zone_id) return '-'
   
-  const zone = productsStore.warehouseZones.find(z => z.id === location.warehouse_zone_id)
+  const zone = warehouseVisualizer.zones.value.find(z => z.id === location.warehouse_zone_id)
   if (!zone) return '-'
   
-  return productsStore.warehouses.find(w => w.id === zone.warehouse_id)?.name || '-'
+  return warehouseVisualizer.warehouses.value.find(w => w.id === zone.warehouse_id)?.name || '-'
 }
 
-const getZoneName = (zoneId?: string): string => {
-  if (!zoneId) return '-'
-  
-  const zone = productsStore.warehouseZones.find(z => z.id === zoneId)
-  return zone ? `${zone.code} - ${zone.name}` : '-'
-}
-
-const editLocation = (location: ProductLocation) => {
+const editLocation = (location: LocationWithProduct) => {
   editingLocation.value = location
   locationForm.value = {
     product_id: location.product_id,
@@ -469,7 +451,7 @@ const editLocation = (location: ProductLocation) => {
   showCreateDialog.value = true
 }
 
-const deleteLocation = async (location: ProductLocation) => {
+const deleteLocation = async (location: LocationWithProduct) => {
   if (confirm(`¿Estás seguro de que deseas eliminar esta ubicación?`)) {
     try {
       const { error } = await supabase
@@ -479,10 +461,12 @@ const deleteLocation = async (location: ProductLocation) => {
 
       if (error) throw error
 
-      // Remove from local array
-      const index = productsStore.productLocations.findIndex(l => l.id === location.id)
-      if (index > -1) {
-        productsStore.productLocations.splice(index, 1)
+      // Reload data
+      if (companyStore.selectedCompany) {
+        await warehouseVisualizer.fetchProductLocations(
+          companyStore.selectedCompany.id,
+          warehouseVisualizer.selectedWarehouse.value || undefined
+        )
       }
     } catch (error) {
       console.error('Error deleting location:', error)
@@ -508,10 +492,12 @@ const submitForm = async () => {
 
       if (error) throw error
 
-      // Update in local array
-      const index = productsStore.productLocations.findIndex(l => l.id === editingLocation.value?.id)
-      if (index > -1 && data) {
-        productsStore.productLocations[index] = data
+      // Reload data
+      if (companyStore.selectedCompany) {
+        await warehouseVisualizer.fetchProductLocations(
+          companyStore.selectedCompany.id,
+          warehouseVisualizer.selectedWarehouse.value || undefined
+        )
       }
     } else {
       // Create new location
@@ -523,9 +509,12 @@ const submitForm = async () => {
 
       if (error) throw error
 
-      // Add to local array
-      if (data) {
-        productsStore.productLocations.push(data)
+      // Reload data
+      if (companyStore.selectedCompany) {
+        await warehouseVisualizer.fetchProductLocations(
+          companyStore.selectedCompany.id,
+          warehouseVisualizer.selectedWarehouse.value || undefined
+        )
       }
     }
     
@@ -551,39 +540,16 @@ const cancelForm = () => {
   }
 }
 
-// Watch for warehouse changes to reset zone filter
-watch(selectedWarehouse, () => {
-  selectedZone.value = ''
-})
-
 onMounted(async () => {
   if (companyStore.selectedCompany) {
-    // Load basic data first
+    await warehouseVisualizer.initializeData(companyStore.selectedCompany.id)
+    
+    // Also load basic products data for the form
     await Promise.all([
       productsStore.fetchProducts(companyStore.selectedCompany.id),
       productsStore.fetchWarehouses(companyStore.selectedCompany.id),
       productsStore.fetchWarehouseZones(companyStore.selectedCompany.id)
     ])
-    
-    // Load all product locations for the company
-    await loadAllProductLocations()
   }
 })
-
-const loadAllProductLocations = async () => {
-  try {
-    if (!companyStore.selectedCompany) return
-    
-    const { data, error } = await supabase
-      .from('product_location')
-      .select('*')
-      .eq('estado', true)
-      .order('created_at', { ascending: false })
-
-    if (error) throw error
-    productsStore.productLocations = data || []
-  } catch (error) {
-    console.error('Error loading product locations:', error)
-  }
-}
 </script>
