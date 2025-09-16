@@ -388,11 +388,28 @@
             <label class="text-sm font-medium mb-2 block">Tipo de Comprobante</label>
             <select
               v-model="documentType"
+              :disabled="requiredDocumentType !== null && requiredDocumentType !== documentType"
               class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              :class="{
+                'opacity-50 cursor-not-allowed': requiredDocumentType !== null && requiredDocumentType !== documentType,
+                'border-red-300 bg-red-50': !isDocumentTypeValid
+              }"
             >
               <option value="03">Boleta de Venta</option>
               <option value="01">Factura</option>
             </select>
+
+            <!-- Validation message -->
+            <div v-if="documentTypeValidationMessage" class="mt-1 text-xs text-red-600 flex items-center gap-1">
+              <AlertCircle class="h-3 w-3" />
+              {{ documentTypeValidationMessage }}
+            </div>
+
+            <!-- Auto-selection message -->
+            <div v-else-if="requiredDocumentType && requiredDocumentType === documentType && selectedCustomerData" class="mt-1 text-xs text-blue-600 flex items-center gap-1">
+              <CheckCircle class="h-3 w-3" />
+              Documento seleccionado automáticamente según normativa SUNAT
+            </div>
           </div>
 
           <!-- Cart Totals -->
@@ -413,9 +430,10 @@
 
           <!-- Action Buttons -->
           <div class="space-y-2">
-            <!-- Validation Message -->
+            <!-- Validation Messages -->
             <div v-if="!canProcessPayment && cartItems.length > 0" class="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded p-2 text-center">
               <span v-if="!selectedCustomer">⚠️ Selecciona un cliente para continuar</span>
+              <span v-else-if="!isDocumentTypeValid">⚠️ {{ documentTypeValidationMessage }}</span>
             </div>
 
             <Button
@@ -744,7 +762,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useCompaniesStore } from '@/stores/companies'
 import { useSalesStore } from '@/stores/sales'
 import { useAuthStore } from '@/stores/auth'
@@ -766,7 +784,9 @@ import {
   Loader2,
   Pencil,
   Check,
-  Printer
+  Printer,
+  AlertCircle,
+  CheckCircle
 } from 'lucide-vue-next'
 
 // UI Components
@@ -904,7 +924,75 @@ const selectedCustomerData = computed(() => {
 
 // Validation for processing payment
 const canProcessPayment = computed(() => {
-  return cartItems.value.length > 0 && selectedCustomer.value && !processing.value
+  return cartItems.value.length > 0 && selectedCustomer.value && !processing.value && isDocumentTypeValid.value
+})
+
+// SUNAT validation rules for document types
+const requiredDocumentType = computed(() => {
+  if (!selectedCustomerData.value) return null
+
+  const customerDocType = selectedCustomerData.value.doc_type
+  const total = cartTotal.value
+
+  // Rule 1: DNI (1) must use Boleta (03)
+  if (customerDocType === '1') {
+    return '03'
+  }
+
+  // Rule 2: RUC (6) must use Factura (01)
+  if (customerDocType === '6') {
+    return '01'
+  }
+
+  // Rule 3: For amounts > 700, customer must have RUC (6) or DNI (1)
+  if (total > 700) {
+    if (customerDocType !== '1' && customerDocType !== '6') {
+      return null // Invalid - needs DNI or RUC for amounts > 700
+    }
+    // If DNI, use Boleta; if RUC, use Factura
+    return customerDocType === '1' ? '03' : '01'
+  }
+
+  // Default case for other scenarios
+  return documentType.value
+})
+
+const isDocumentTypeValid = computed(() => {
+  if (!selectedCustomerData.value) return true
+
+  const customerDocType = selectedCustomerData.value.doc_type
+  const total = cartTotal.value
+  const currentDocType = documentType.value
+
+  // For amounts > 700, customer must have DNI or RUC
+  if (total > 700 && customerDocType !== '1' && customerDocType !== '6') {
+    return false
+  }
+
+  // Check if current document type matches required
+  const required = requiredDocumentType.value
+  return required === null || currentDocType === required
+})
+
+const documentTypeValidationMessage = computed(() => {
+  if (!selectedCustomerData.value) return null
+
+  const customerDocType = selectedCustomerData.value.doc_type
+  const total = cartTotal.value
+
+  if (total > 700 && customerDocType !== '1' && customerDocType !== '6') {
+    return 'Para montos mayores a S/ 700 el cliente debe tener DNI o RUC'
+  }
+
+  if (customerDocType === '1' && documentType.value !== '03') {
+    return 'Clientes con DNI deben recibir Boleta de Venta'
+  }
+
+  if (customerDocType === '6' && documentType.value !== '01') {
+    return 'Clientes con RUC deben recibir Factura'
+  }
+
+  return null
 })
 
 const filteredProducts = computed(() => {
@@ -948,6 +1036,14 @@ const availableBoletaSeries = computed(() => {
 const availableFacturaSeries = computed(() => {
   return series.value.filter(s => s.document_type_code === '01' && s.is_active)
 })
+
+// Auto-update document type based on customer and total
+watch([selectedCustomer, cartTotal], () => {
+  const required = requiredDocumentType.value
+  if (required && required !== documentType.value) {
+    documentType.value = required
+  }
+}, { immediate: true })
 
 // Almacenes disponibles
 const availableWarehouses = ref([])
