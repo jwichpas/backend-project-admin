@@ -4,6 +4,9 @@ export const useThemeStore = defineStore('theme', {
   state: () => ({
     darkMode: false
   }),
+  getters: {
+    isDark: (state) => state.darkMode
+  },
   actions: {
     toggleDarkMode() {
       this.darkMode = !this.darkMode

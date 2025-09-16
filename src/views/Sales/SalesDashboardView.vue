@@ -119,45 +119,15 @@
       </div>
     </div>
 
+    <!-- Charts Section -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <!-- Sales Trend Chart -->
-      <div class="bg-card border border-border rounded-lg p-6">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="text-lg font-semibold">Tendencia de Ventas</h3>
-          <BarChart3 class="h-5 w-5 text-muted-foreground" />
-        </div>
-        
-        <div v-if="salesTrendData.length > 0" class="space-y-4">
-          <div v-for="trend in salesTrendData.slice(-6)" :key="trend.sale_month" class="flex items-center justify-between">
-            <div class="flex-1">
-              <div class="flex items-center justify-between mb-1">
-                <span class="text-sm font-medium">{{ formatMonth(trend.sale_month) }}</span>
-                <span class="text-sm font-bold">{{ formatCurrency(trend.total_sales) }}</span>
-              </div>
-              <div class="w-full bg-muted rounded-full h-2">
-                <div 
-                  class="h-2 rounded-full transition-all duration-300"
-                  :class="trend.growth_percentage > 0 ? 'bg-green-500 dark:bg-green-400' : 'bg-red-500 dark:bg-red-400'"
-                  :style="{ width: `${Math.min(Math.abs(trend.growth_percentage || 0), 100)}%` }"
-                ></div>
-              </div>
-              <div class="flex items-center justify-between mt-1">
-                <span class="text-xs text-muted-foreground">{{ trend.total_transactions }} transacciones</span>
-                <span 
-                  class="text-xs font-medium"
-                  :class="(trend.growth_percentage || 0) > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'"
-                >
-                  {{ trend.growth_percentage ? `${trend.growth_percentage.toFixed(1)}%` : 'N/A' }}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <div v-else class="flex items-center justify-center py-8">
-          <p class="text-muted-foreground">No hay datos disponibles</p>
-        </div>
-      </div>
+      <!-- Sales Trend Chart with ApexCharts -->
+      <SalesTrendChart
+        :monthly-trend="salesTrendData"
+        :profit-data="profitTrendData"
+        :theme="currentTheme"
+        :loading="loading"
+      />
 
       <!-- Top Sellers -->
       <div class="bg-card border border-border rounded-lg p-6">
@@ -165,10 +135,10 @@
           <h3 class="text-lg font-semibold">Top Vendedores</h3>
           <Trophy class="h-5 w-5 text-muted-foreground" />
         </div>
-        
+
         <div v-if="topSellersByMonth.length > 0" class="space-y-3">
-          <div 
-            v-for="(seller, index) in topSellersByMonth.slice(0, 5)" 
+          <div
+            v-for="(seller, index) in topSellersByMonth.slice(0, 5)"
             :key="seller.seller_user_id"
             class="flex items-center justify-between p-3 bg-muted rounded-lg"
           >
@@ -188,94 +158,68 @@
             </div>
           </div>
         </div>
-        
+
         <div v-else class="flex items-center justify-center py-8">
           <p class="text-muted-foreground">No hay datos disponibles</p>
         </div>
       </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <!-- Top Products by Value -->
-      <div class="bg-card border border-border rounded-lg p-6">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="text-lg font-semibold">Productos por Valor</h3>
-          <DollarSign class="h-5 w-5 text-muted-foreground" />
-        </div>
-        
-        <div v-if="topProductsByValue.length > 0" class="space-y-3">
-          <div 
-            v-for="(product, index) in topProductsByValue.slice(0, 5)" 
-            :key="product.product_id"
-            class="flex items-center justify-between p-3 bg-muted rounded-lg"
-          >
-            <div class="flex items-center gap-3">
-              <div class="flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 dark:bg-blue-600 text-white text-xs font-bold">
-                {{ index + 1 }}
-              </div>
-              <div class="flex-1">
-                <p class="font-medium text-sm">{{ product.product_name }}</p>
-                <p class="text-xs text-muted-foreground">SKU: {{ product.sku }}</p>
-              </div>
-            </div>
-            <div class="text-right">
-              <p class="font-bold text-sm">{{ formatCurrency(product.total_sales_value) }}</p>
-              <p class="text-xs text-muted-foreground">{{ formatNumber(product.total_quantity_sold) }} uds.</p>
-            </div>
-          </div>
-        </div>
-        
-        <div v-else class="flex items-center justify-center py-8">
-          <p class="text-muted-foreground">No hay datos disponibles</p>
-        </div>
-      </div>
+    <!-- Advanced Charts Section -->
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      <!-- Top Products Chart -->
+      <TopProductsChart
+        :products="topProductsByValue"
+        :theme="currentTheme"
+        :max-items="10"
+      />
 
-      <!-- Top Customers -->
-      <div class="bg-card border border-border rounded-lg p-6">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="text-lg font-semibold">Mejores Clientes</h3>
-          <Users class="h-5 w-5 text-muted-foreground" />
-        </div>
-        
-        <div v-if="topCustomers.length > 0" class="space-y-3">
-          <div 
-            v-for="(customer, index) in topCustomers.slice(0, 5)" 
-            :key="customer.customer_id"
-            class="flex items-center justify-between p-3 bg-muted rounded-lg"
-          >
-            <div class="flex items-center gap-3">
-              <div class="flex items-center justify-center w-6 h-6 rounded-full bg-green-500 dark:bg-green-600 text-white text-xs font-bold">
-                {{ index + 1 }}
-              </div>
-              <div class="flex-1">
-                <p class="font-medium text-sm">{{ customer.customer_name || 'Cliente General' }}</p>
-                <p class="text-xs text-muted-foreground">{{ customer.customer_doc_number || 'Sin documento' }}</p>
-              </div>
-            </div>
-            <div class="text-right">
-              <p class="font-bold text-sm">{{ formatCurrency(customer.total_sales_value) }}</p>
-              <p class="text-xs text-muted-foreground">{{ customer.total_transactions }} compras</p>
-            </div>
-          </div>
-        </div>
-        
-        <div v-else class="flex items-center justify-center py-8">
-          <p class="text-muted-foreground">No hay datos disponibles</p>
-        </div>
-      </div>
+      <!-- Sales Channel Chart -->
+      <SalesChannelChart
+        :channels="channelMonthly"
+        :theme="currentTheme"
+      />
     </div>
 
-    <!-- Profitability Metrics -->
-    <ProfitabilityMetricsCard 
-      :metrics="profitabilityMetrics" 
-      :loading="loading"
+    <!-- Profitability Analysis -->
+    <ProfitabilityChart
+      :metrics="profitabilityMetrics"
+      :theme="currentTheme"
     />
 
-    <!-- Sales Channel Analysis -->
-    <SalesChannelAnalysis 
-      :channels="channelMonthly" 
-      :loading="loading"
-    />
+    <!-- Customer Analysis -->
+    <div class="bg-card border border-border rounded-lg p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-semibold">Mejores Clientes</h3>
+        <Users class="h-5 w-5 text-muted-foreground" />
+      </div>
+
+      <div v-if="topCustomers.length > 0" class="space-y-3">
+        <div
+          v-for="(customer, index) in topCustomers.slice(0, 5)"
+          :key="customer.customer_id"
+          class="flex items-center justify-between p-3 bg-muted rounded-lg"
+        >
+          <div class="flex items-center gap-3">
+            <div class="flex items-center justify-center w-6 h-6 rounded-full bg-green-500 dark:bg-green-600 text-white text-xs font-bold">
+              {{ index + 1 }}
+            </div>
+            <div class="flex-1">
+              <p class="font-medium text-sm">{{ customer.customer_name || 'Cliente General' }}</p>
+              <p class="text-xs text-muted-foreground">{{ customer.customer_doc_number || 'Sin documento' }}</p>
+            </div>
+          </div>
+          <div class="text-right">
+            <p class="font-bold text-sm">{{ formatCurrency(customer.total_sales_value) }}</p>
+            <p class="text-xs text-muted-foreground">{{ customer.total_transactions }} compras</p>
+          </div>
+        </div>
+      </div>
+
+      <div v-else class="flex items-center justify-center py-8">
+        <p class="text-muted-foreground">No hay datos disponibles</p>
+      </div>
+    </div>
 
     <!-- Branch Performance (if multiple branches) -->
     <div v-if="branchStats.length > 1" class="bg-card border border-border rounded-lg p-6">
@@ -319,6 +263,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useSalesDashboardStore } from '@/stores/salesDashboard'
 import { useCompaniesStore } from '@/stores/companies'
+import { useThemeStore } from '@/stores/theme'
 import {
   Clock,
   RefreshCw,
@@ -327,16 +272,18 @@ import {
   TrendingUp,
   Users,
   Package,
-  BarChart3,
   Trophy,
   Building
 } from 'lucide-vue-next'
 import Button from '@/components/ui/Button.vue'
-import ProfitabilityMetricsCard from '@/components/dashboard/ProfitabilityMetricsCard.vue'
-import SalesChannelAnalysis from '@/components/dashboard/SalesChannelAnalysis.vue'
+import SalesTrendChart from '@/components/dashboard/SalesTrendChart.vue'
+import TopProductsChart from '@/components/dashboard/TopProductsChart.vue'
+import SalesChannelChart from '@/components/dashboard/SalesChannelChart.vue'
+import ProfitabilityChart from '@/components/dashboard/ProfitabilityChart.vue'
 
 const dashboardStore = useSalesDashboardStore()
 const companiesStore = useCompaniesStore()
+const themeStore = useThemeStore()
 
 // Local state
 const loading = ref(false)
@@ -351,6 +298,8 @@ const branchStats = computed(() => dashboardStore.branchStats)
 const lastRefresh = computed(() => dashboardStore.lastRefresh)
 const profitabilityMetrics = computed(() => dashboardStore.profitabilityMetrics)
 const channelMonthly = computed(() => dashboardStore.channelMonthly)
+const profitTrendData = computed(() => dashboardStore.profitTrendData)
+const currentTheme = computed(() => themeStore.isDark ? 'dark' : 'light')
 
 // Methods
 const formatCurrency = (amount: number) => {
