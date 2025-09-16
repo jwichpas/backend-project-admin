@@ -127,7 +127,7 @@ INSERT INTO public.companies (
     '20600055519',
     'MI EMPRESA SAC',
     'MI EMPRESA',    
-    'CLP',
+    'PEN',
     'PROMEDIO_MOVIL'
 );
 

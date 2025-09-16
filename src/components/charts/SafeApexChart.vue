@@ -12,8 +12,8 @@
       v-else
       :type="type"
       :height="height"
-      :options="options"
-      :series="series"
+      :options="safeOptions"
+      :series="cleanedSeries"
       :key="chartKey"
     />
   </div>
@@ -40,33 +40,72 @@ const props = withDefaults(defineProps<Props>(), {
 const chartKey = ref(0)
 const isReady = ref(false)
 
-const hasValidData = computed(() => {
+const cleanedSeries = computed(() => {
   if (!props.series || !Array.isArray(props.series) || props.series.length === 0) {
-    return false
+    return []
   }
 
   // For pie/donut charts (series is array of numbers)
   if (typeof props.series[0] === 'number') {
-    return props.series.some(value =>
-      value !== null &&
-      value !== undefined &&
+    return props.series.filter(value =>
+      typeof value === 'number' &&
       !isNaN(value) &&
-      value > 0
+      value >= 0
     )
   }
 
   // For line/bar charts (series is array of objects with data arrays)
-  return props.series.some(serie =>
-    serie &&
+  return props.series.map(serie => {
+    if (!serie || !serie.data || !Array.isArray(serie.data)) {
+      return { ...serie, data: [] }
+    }
+
+    return {
+      ...serie,
+      data: serie.data.map(value => {
+        // Ensure we return valid numbers, convert null/undefined to 0
+        if (value === null || value === undefined || isNaN(value)) {
+          return 0
+        }
+        return typeof value === 'number' ? value : parseFloat(value) || 0
+      })
+    }
+  }).filter(serie => serie.data.length > 0)
+})
+
+const hasValidData = computed(() => {
+  if (cleanedSeries.value.length === 0) return false
+
+  // For pie/donut charts
+  if (typeof cleanedSeries.value[0] === 'number') {
+    return cleanedSeries.value.some(value => value > 0)
+  }
+
+  // For line/bar charts
+  return cleanedSeries.value.some(serie =>
     serie.data &&
-    Array.isArray(serie.data) &&
     serie.data.length >= props.minDataPoints &&
-    serie.data.some(value =>
-      value !== null &&
-      value !== undefined &&
-      !isNaN(value)
-    )
+    serie.data.some(value => value > 0)
   )
+})
+
+const safeOptions = computed(() => {
+  const baseOptions = { ...props.options }
+
+  // Ensure chart type matches the series format
+  if (typeof cleanedSeries.value[0] === 'number') {
+    // For pie/donut charts, ensure we don't have conflicting options
+    if (!['pie', 'donut'].includes(props.type)) {
+      console.warn(`Chart type '${props.type}' doesn't match numeric series data. Expected 'pie' or 'donut'.`)
+    }
+  } else {
+    // For line/bar charts, ensure proper axis configuration
+    if (['pie', 'donut'].includes(props.type)) {
+      console.warn(`Chart type '${props.type}' doesn't match object series data. Expected 'line', 'area', 'bar', etc.`)
+    }
+  }
+
+  return baseOptions
 })
 
 const updateChart = async () => {

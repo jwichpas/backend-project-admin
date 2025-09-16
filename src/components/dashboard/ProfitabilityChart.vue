@@ -91,19 +91,30 @@ const formatCurrency = (value: number) => {
   return `S/ ${value.toLocaleString('es-PE', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 }
 
-const formatMonth = (value: string) => {
+const formatMonth = (value: string | undefined | null) => {
+  if (!value || typeof value !== 'string') {
+    return 'N/A'
+  }
+
   // Extract year and month from ISO string to avoid timezone issues
   const dateStr = value.slice(0, 10) // Get YYYY-MM-DD part
   const [year, month] = dateStr.split('-')
+
+  if (!year || !month) {
+    return 'N/A'
+  }
+
   const date = new Date(parseInt(year), parseInt(month) - 1, 1) // Month is 0-indexed
   return date.toLocaleDateString('es-PE', { month: 'short', year: '2-digit' })
 }
 
 const sortedMetrics = computed(() =>
-  [...props.metrics].sort((a, b) => {
-    // Use string comparison for ISO dates to avoid timezone issues
-    return a.sale_month.localeCompare(b.sale_month)
-  })
+  [...props.metrics]
+    .filter(metric => metric && metric.sale_month) // Filter out invalid items
+    .sort((a, b) => {
+      // Use string comparison for ISO dates to avoid timezone issues
+      return (a.sale_month || '').localeCompare(b.sale_month || '')
+    })
 )
 
 // Trend series data

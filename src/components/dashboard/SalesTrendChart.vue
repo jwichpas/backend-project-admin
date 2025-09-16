@@ -80,10 +80,19 @@ const formatCurrency = (value: number) => {
   return `S/ ${value.toLocaleString('es-PE', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 }
 
-const formatDate = (value: string) => {
+const formatDate = (value: string | undefined | null) => {
+  if (!value || typeof value !== 'string') {
+    return 'N/A'
+  }
+
   // Extract year and month from ISO string to avoid timezone issues
   const dateStr = value.slice(0, 10) // Get YYYY-MM-DD part
   const [year, month] = dateStr.split('-')
+
+  if (!year || !month) {
+    return 'N/A'
+  }
+
   const date = new Date(parseInt(year), parseInt(month) - 1, 1) // Month is 0-indexed
 
   if (selectedPeriod.value === 'monthly') {
@@ -97,9 +106,9 @@ const formatDate = (value: string) => {
 }
 
 const processedData = computed(() => {
-  let data = [...props.monthlyTrend].sort((a, b) =>
-    a.sale_month.localeCompare(b.sale_month)
-  )
+  let data = [...props.monthlyTrend]
+    .filter(item => item && item.sale_month) // Filter out invalid items
+    .sort((a, b) => (a.sale_month || '').localeCompare(b.sale_month || ''))
 
   if (selectedPeriod.value === 'quarterly') {
     const quarterlyData: any[] = []

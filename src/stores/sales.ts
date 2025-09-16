@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { supabase } from '@/lib/supabase'
+import { electronicInvoicingService } from '@/services/electronicInvoicing'
 
 // ============================================================================
 // INTERFACES Y TIPOS
@@ -722,6 +723,84 @@ export const useSalesStore = defineStore('sales', {
       } catch (error: any) {
         this.error = error.message
         console.error('Error creating sales document:', error)
+        throw error
+      } finally {
+        this.loading = false
+      }
+    },
+
+    async createSalesDocWithElectronicInvoicing(
+      docData: Omit<SalesDoc, 'id' | 'created_at' | 'updated_at'>,
+      cartItems: any[],
+      companyData: any,
+      customerData: any
+    ) {
+      this.loading = true
+      this.error = null
+      try {
+        // First create the sales document
+        const salesDoc = await this.createSalesDoc(docData)
+
+        // Generate electronic invoice
+        try {
+          const invoiceData = electronicInvoicingService.convertSalesDocToInvoice(
+            salesDoc,
+            cartItems,
+            companyData,
+            customerData
+          )
+
+          console.log('Sending invoice to electronic invoicing service:', invoiceData)
+
+          // Send to external invoicing service
+          const invoiceResponse = await electronicInvoicingService.sendInvoice(invoiceData)
+
+          console.log('Invoice response received:', invoiceResponse)
+
+          // Process and store the response (upload files and update database)
+          await electronicInvoicingService.processAndStoreInvoiceResponse(
+            salesDoc.id,
+            invoiceResponse,
+            invoiceData
+          )
+
+          console.log('Electronic invoice processed successfully')
+
+          // Update local sales doc with electronic invoice status
+          if (salesDoc && this.salesDocs.length > 0) {
+            const docIndex = this.salesDocs.findIndex(doc => doc.id === salesDoc.id)
+            if (docIndex >= 0) {
+              this.salesDocs[docIndex] = {
+                ...this.salesDocs[docIndex],
+                greenter_hash: invoiceResponse.hash,
+                greenter_status: invoiceResponse.sunatResponse.success ? 'ACCEPTED' : 'REJECTED',
+                error_message: invoiceResponse.sunatResponse.cdrResponse.description
+              }
+            }
+          }
+
+        } catch (invoiceError) {
+          console.error('Electronic invoicing failed:', invoiceError)
+
+          // Update sales document with error status
+          await supabase
+            .from('sales_docs')
+            .update({
+              greenter_status: 'ERROR',
+              error_message: `Error en facturación electrónica: ${invoiceError.message}`,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', salesDoc.id)
+
+          // Don't throw the error here - the sales document was created successfully
+          // Just log the invoice error for later retry
+          console.warn('Sales document created but electronic invoicing failed. Document can be processed later.')
+        }
+
+        return salesDoc
+      } catch (error: any) {
+        this.error = error.message
+        console.error('Error creating sales document with electronic invoicing:', error)
         throw error
       } finally {
         this.loading = false

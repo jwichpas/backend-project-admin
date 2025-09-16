@@ -655,7 +655,7 @@ const getPageTitle = () => {
     'sales-dispatch': 'Órdenes de Despacho',
     'purchases': 'Compras',
     'purchases-orders': 'Órdenes de Compra',
-    'purchases-docs': 'Documentos de Compra', 
+    'purchases-docs': 'Documentos de Compra',
     'purchases-receptions': 'Recepciones',
     'inventory': 'Inventario',
     'warehouses': 'Gestión de Almacenes',
@@ -718,7 +718,7 @@ const fetchExchangeRates = async (company?: any) => {
       .from('exchange_rates')
       .select('*')
       .eq('from_currency_code', selectedCompany.currency_code)
-      .in('to_currency_code', ['USD', 'PEN'])
+      .in('to_currency_code', ['USD', 'CLP'])
       .order('rate_date', { ascending: false })
       .limit(2)
 

@@ -367,7 +367,7 @@ cost_agg AS (
     DATE_TRUNC('month', movement_date) AS movement_month,
     SUM(total_cost_out_local) AS total_cost_out_local
   FROM stock_ledger
-  WHERE operation_type = '02' AND deleted_at IS NULL
+  WHERE operation_type = '01' AND deleted_at IS NULL
   GROUP BY company_id, DATE_TRUNC('month', movement_date)
 )
 SELECT

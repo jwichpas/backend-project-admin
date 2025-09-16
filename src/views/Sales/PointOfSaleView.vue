@@ -222,7 +222,7 @@
                           @error="() => handleImageError(item.product.product_id)"
                         />
                       </template>
-                      <Package v-else class="h-4 w-4 text-muted-foreground" />
+                      <Package v-else class="h-4 w-4 text-gray-500" />
                     </div>
                     <!-- Product info -->
                     <div class="flex-1">
@@ -247,10 +247,10 @@
                           <Button
                             variant="ghost"
                             size="sm"
-                            class="h-4 w-4 p-0"
+                            class="h-8 w-8 p-0"
                             @click="cancelUnitEdit(index)"
                           >
-                            <X class="h-3 w-3 text-gray-600" />
+                            <X class="h-6 w-6 text-gray-600" />
                           </Button>
                         </div>
                         <div v-else class="flex items-center gap-1">
@@ -261,10 +261,10 @@
                             v-if="getAvailableUnitsForItem(item).length > 1"
                             variant="ghost"
                             size="sm"
-                            class="h-4 w-4 p-0 opacity-60 hover:opacity-100"
+                            class="h-8 w-8 p-0"
                             @click="startUnitEdit(index)"
                           >
-                            <Pencil class="h-3 w-3" />
+                            <Pencil class="h-6 w-6 text-blue-600" />
                           </Button>
                         </div>
                       </div>
@@ -273,10 +273,10 @@
                   <Button
                     variant="ghost"
                     size="sm"
-                    class="h-6 w-6 p-0"
+                    class="h-7 w-7 p-1"
                     @click="removeFromCart(index)"
                   >
-                    <X class="h-3 w-3" />
+                    <X class="h-8 w-8 text-red-600" />
                   </Button>
                 </div>
 
@@ -285,11 +285,11 @@
                     <Button
                       variant="outline"
                       size="sm"
-                      class="h-6 w-6 p-0"
+                      class="h-7 w-7 p-1"
                       @click="updateQuantity(index, item.quantity - 1)"
                       :disabled="item.quantity <= 1"
                     >
-                      <Minus class="h-3 w-3" />
+                      <Minus class="h-6 w-6 text-red-600" />
                     </Button>
 
                     <!-- Quantity Display/Edit -->
@@ -307,10 +307,10 @@
                       <Button
                         variant="ghost"
                         size="sm"
-                        class="h-4 w-4 p-0"
+                        class="h-7 w-7 p-1"
                         @click="saveQuantity(index, item.quantity)"
                       >
-                        <Check class="h-3 w-3 text-green-600" />
+                        <Check class="h-5 w-5 text-green-600" />
                       </Button>
                     </div>
                     <div v-else class="flex items-center gap-1">
@@ -318,20 +318,20 @@
                       <Button
                         variant="ghost"
                         size="sm"
-                        class="h-4 w-4 p-0 opacity-60 hover:opacity-100"
+                        class="h-7 w-7 p-1"
                         @click="startQuantityEdit(index)"
                       >
-                        <Pencil class="h-5 w-5" />
+                        <Pencil class="h-4 w-4" />
                       </Button>
                     </div>
 
                     <Button
                       variant="outline"
                       size="sm"
-                      class="h-6 w-6 p-0"
+                      class="h-7 w-7 p-1"
                       @click="updateQuantity(index, item.quantity + 1)"
                     >
-                      <Plus class="h-3 w-3" />
+                      <Plus class="h-6 w-6 text-green-600" />
                     </Button>
                   </div>
                   <div class="text-right">
@@ -352,10 +352,10 @@
                         <Button
                           variant="ghost"
                           size="sm"
-                          class="h-4 w-4 p-0"
+                          class="h-7 w-7 p-1"
                           @click="saveUnitPrice(index, item.unit_price)"
                         >
-                          <Check class="h-3 w-3 text-green-600" />
+                          <Check class="h-5 w-5 text-green-600" />
                         </Button>
                       </div>
                       <div v-else class="flex items-center gap-1">
@@ -363,10 +363,10 @@
                         <Button
                           variant="ghost"
                           size="sm"
-                          class="h-4 w-4 p-0 opacity-60 hover:opacity-100"
+                          class="h-7 w-7 p-1"
                           @click="startPriceEdit(index)"
                         >
-                          <Pencil class="h-3 w-3" />
+                          <Pencil class="h-4 w-4 text-blue-600" />
                         </Button>
                       </div>
                       <span>c/u</span>
@@ -413,23 +413,28 @@
 
           <!-- Action Buttons -->
           <div class="space-y-2">
+            <!-- Validation Message -->
+            <div v-if="!canProcessPayment && cartItems.length > 0" class="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded p-2 text-center">
+              <span v-if="!selectedCustomer">⚠️ Selecciona un cliente para continuar</span>
+            </div>
+
             <Button
               class="w-full h-12"
-              :disabled="cartItems.length === 0 || processing"
+              :disabled="!canProcessPayment"
               @click="processPayment"
             >
               <Loader2 v-if="processing" class="mr-2 h-4 w-4 animate-spin" />
-              <CreditCard v-else class="mr-2 h-4 w-4" />
+              <CreditCard v-else class="mr-2 h-6 w-6 text-white font-bold" />
               {{ processing ? 'Procesando...' : 'Procesar Venta' }}
             </Button>
 
             <div class="grid grid-cols-2 gap-2">
               <Button
                 variant="outline"
-                :disabled="cartItems.length === 0"
+                :disabled="!canProcessPayment"
                 @click="holdSale"
               >
-                <Clock class="mr-2 h-4 w-4" />
+                <Clock class="mr-2 h-6 w-6 text-blue-600 font-bold" />
                 Retener
               </Button>
               <Button
@@ -437,7 +442,7 @@
                 :disabled="cartItems.length === 0"
                 @click="clearCart"
               >
-                <Trash2 class="mr-2 h-4 w-4" />
+                <Trash2 class="mr-2 h-6 w-6 text-red-600 font-bold" />
                 Limpiar
               </Button>
             </div>
@@ -452,7 +457,7 @@
         <DialogHeader>
           <DialogTitle>Resumen de Venta</DialogTitle>
         </DialogHeader>
-        
+
         <div v-if="saleData" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <!-- Sale Summary -->
           <div class="space-y-4">
@@ -482,12 +487,12 @@
             <div class="bg-muted rounded-lg p-4">
               <h3 class="font-semibold mb-3">Productos</h3>
               <div class="space-y-2 max-h-60 overflow-y-auto">
-                <div v-for="item in cartItems" :key="item.product.product_id" 
+                <div v-for="item in cartItems" :key="item.product.product_id"
                      class="flex justify-between items-start text-sm border-b border-border pb-2">
                   <div class="flex-1">
                     <div class="font-medium">{{ item.product.product_name }}</div>
                     <div class="text-muted-foreground">
-                      {{ item.quantity }} {{ getUnitName(item.selected_unit || item.product.unit_code) }} 
+                      {{ item.quantity }} {{ getUnitName(item.selected_unit || item.product.unit_code) }}
                       × {{ formatCurrency(item.unit_price) }}
                     </div>
                   </div>
@@ -517,8 +522,8 @@
             <!-- Processing Options -->
             <div class="space-y-3">
               <h3 class="font-semibold">Opciones de Procesamiento</h3>
-              
-              <Button 
+
+              <Button
                 class="w-full h-12 bg-green-600 hover:bg-green-700"
                 :disabled="processing"
                 @click="processSaleDirectly"
@@ -528,7 +533,7 @@
                 Venta Simple (Solo Documento)
               </Button>
 
-              <Button 
+              <Button
                 class="w-full h-12 bg-blue-600 hover:bg-blue-700"
                 :disabled="processing"
                 @click="processSaleWithQuickShipment"
@@ -538,7 +543,7 @@
                 Despacho Rápido (Sin Logística)
               </Button>
 
-              <Button 
+              <Button
                 class="w-full h-12 bg-orange-600 hover:bg-orange-700"
                 :disabled="processing"
                 @click="processSaleWithDispatchOrder"
@@ -548,8 +553,8 @@
                 Orden de Despacho (Programado)
               </Button>
 
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 class="w-full"
                 @click="showSaleSummaryModal = false"
                 :disabled="processing"
@@ -897,6 +902,11 @@ const selectedCustomerData = computed(() => {
   return customers.value.find(c => c.id === selectedCustomer.value)
 })
 
+// Validation for processing payment
+const canProcessPayment = computed(() => {
+  return cartItems.value.length > 0 && selectedCustomer.value && !processing.value
+})
+
 const filteredProducts = computed(() => {
   let products = salesStore.availableProducts || []
 
@@ -994,8 +1004,8 @@ const onPriceListChange = async (event: Event) => {
 }
 
 const addToCart = async (product: any) => {
-  const existingIndex = cartItems.value.findIndex(item => 
-    item.product.product_id === product.product_id && 
+  const existingIndex = cartItems.value.findIndex(item =>
+    item.product.product_id === product.product_id &&
     (item.selected_unit || product.unit_code) === product.unit_code
   )
 
@@ -1004,7 +1014,7 @@ const addToCart = async (product: any) => {
   } else {
     // Load conversions for this product
     await productConversions.fetchConversions(product.product_id)
-    
+
     cartItems.value.push({
       product,
       quantity: 1,
@@ -1128,7 +1138,7 @@ const cancelUnitEdit = (index: number) => {
 
 const getAvailableUnitsForItem = (item: any) => {
   return productConversions.getConvertibleUnits(
-    item.product.product_id, 
+    item.product.product_id,
     item.product.unit_code
   )
 }
@@ -1137,11 +1147,11 @@ const getAvailableUnitsForItem = (item: any) => {
 const getUnitName = (unitCode: string) => {
   try {
     const units = productConversions.availableUnits.value || []
-    
+
     if (!Array.isArray(units)) {
       return unitCode
     }
-    
+
     const found = units.find(u => u.code === unitCode)
     return found?.name || unitCode
   } catch (error) {
@@ -1174,10 +1184,10 @@ const processPayment = async () => {
   try {
     // Prepare sale data
     saleData.value = await prepareSaleData()
-    
+
     // Show summary modal
     showSaleSummaryModal.value = true
-    
+
   } catch (error) {
     console.error('Error preparing sale:', error)
     // TODO: Show error toast
@@ -1245,9 +1255,21 @@ const processSaleDirectly = async () => {
   if (!saleData.value) return
 
   processing.value = true
-  
+
   try {
-    await salesStore.createSalesDoc(saleData.value)
+    // Check if the function exists, fallback to regular createSalesDoc
+    if (typeof salesStore.createSalesDocWithElectronicInvoicing === 'function') {
+      await salesStore.createSalesDocWithElectronicInvoicing(
+        saleData.value,
+        cartItems.value,
+        companiesStore.currentCompany,
+        selectedCustomerData.value
+      )
+    } else {
+      // Fallback to regular sales doc creation
+      await salesStore.createSalesDoc(saleData.value)
+      console.warn('Electronic invoicing function not available, using regular sales doc creation')
+    }
 
     // Clear cart after successful sale
     clearCart()
@@ -1268,10 +1290,21 @@ const processSaleWithQuickShipment = async () => {
   if (!saleData.value) return
 
   processing.value = true
-  
+
   try {
-    // Create sales document first
-    const createdSaleDoc = await salesStore.createSalesDoc(saleData.value)
+    // Create sales document with electronic invoicing
+    let createdSaleDoc
+    if (typeof salesStore.createSalesDocWithElectronicInvoicing === 'function') {
+      createdSaleDoc = await salesStore.createSalesDocWithElectronicInvoicing(
+        saleData.value,
+        cartItems.value,
+        companiesStore.currentCompany,
+        selectedCustomerData.value
+      )
+    } else {
+      createdSaleDoc = await salesStore.createSalesDoc(saleData.value)
+      console.warn('Electronic invoicing function not available, using regular sales doc creation')
+    }
 
     // Create quick shipment (no vehicle/driver needed)
     await salesStore.createQuickShipment(createdSaleDoc.id, cartItems.value, companiesStore.currentCompany.id)
@@ -1295,10 +1328,21 @@ const processSaleWithDispatchOrder = async () => {
   if (!saleData.value) return
 
   processing.value = true
-  
+
   try {
-    // Create sales document first
-    const createdSaleDoc = await salesStore.createSalesDoc(saleData.value)
+    // Create sales document with electronic invoicing
+    let createdSaleDoc
+    if (typeof salesStore.createSalesDocWithElectronicInvoicing === 'function') {
+      createdSaleDoc = await salesStore.createSalesDocWithElectronicInvoicing(
+        saleData.value,
+        cartItems.value,
+        companiesStore.currentCompany,
+        selectedCustomerData.value
+      )
+    } else {
+      createdSaleDoc = await salesStore.createSalesDoc(saleData.value)
+      console.warn('Electronic invoicing function not available, using regular sales doc creation')
+    }
 
     // Create dispatch order (status PENDING, will need vehicle/driver assignment later)
     await salesStore.createDispatchOrderForSales([createdSaleDoc.id], companiesStore.currentCompany.id)
@@ -1329,17 +1373,17 @@ const printTicket = () => {
   if (!printWindow) return
 
   const ticketHTML = generateTicketHTML()
-  
+
   printWindow.document.write(`
     <!DOCTYPE html>
     <html>
     <head>
       <title>Ticket - ${saleData.value.series}-${String(saleData.value.number).padStart(8, '0')}</title>
       <style>
-        body { 
-          font-family: 'Courier New', monospace; 
-          font-size: 12px; 
-          margin: 0; 
+        body {
+          font-family: 'Courier New', monospace;
+          font-size: 12px;
+          margin: 0;
           padding: 10px;
           width: 72mm;
           background: white;
@@ -1360,7 +1404,7 @@ const printTicket = () => {
     </body>
     </html>
   `)
-  
+
   printWindow.document.close()
   printWindow.focus()
   printWindow.print()
@@ -1383,8 +1427,8 @@ const generateTicketHTML = () => {
 
     <div class="dashed">
       <div><strong>Cliente:</strong> ${selectedCustomerData.value?.fullname || 'Cliente General'}</div>
-      ${selectedCustomerData.value?.doc_number ? 
-        `<div><strong>${selectedCustomerData.value?.doc_type === '6' ? 'RUC:' : 'DNI:'}</strong> ${selectedCustomerData.value.doc_number}</div>` 
+      ${selectedCustomerData.value?.doc_number ?
+        `<div><strong>${selectedCustomerData.value?.doc_type === '6' ? 'RUC:' : 'DNI:'}</strong> ${selectedCustomerData.value.doc_number}</div>`
         : ''}
       <div><strong>Fecha:</strong> ${new Date().toLocaleDateString('es-PE')} ${new Date().toLocaleTimeString('es-PE')}</div>
     </div>
@@ -1437,7 +1481,7 @@ const saveSettings = () => {
 
 const fetchWarehouses = async () => {
   if (!companiesStore.currentCompany?.id) return
-  
+
   try {
     const { data, error } = await supabase
       .from('warehouses')
