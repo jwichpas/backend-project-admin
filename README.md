@@ -1,14 +1,49 @@
-# Backend Project Admin
+# Sistema de Administración y Punto de Venta (POS)
 
-Una aplicación de administración moderna construida con Vue 3, TypeScript, TailwindCSS v4 y shadcn/ui, con integración completa de Supabase para backend services.
+Sistema integral de administración empresarial con punto de venta moderno, facturación electrónica SUNAT, gestión de inventarios con almacenes 2D/3D y dashboard de ventas con gráficos interactivos. Construido con Vue 3, TypeScript, TailwindCSS v4 y Supabase.
 
-## 🚀 Características
+## 🚀 Características Principales
+
+### 💼 Gestión Empresarial
+- **Dashboard Interactivo** con gráficos de ventas usando ApexCharts
+- **Gestión de Compañías** y configuración empresarial
+- **Administración de Usuarios** con roles y permisos
+- **Gestión de Clientes** con datos completos y historial
+
+### 🛒 Punto de Venta (POS)
+- **Interfaz Moderna de POS** con carrito de compras intuitivo
+- **Búsqueda Inteligente** de productos con filtros avanzados
+- **Edición Inline** de productos en el carrito con animaciones elegantes
+- **Conversiones de Unidades** automáticas (ej: litros a cajas)
+- **Múltiples Métodos de Pago** y cálculo automático de cambio
+
+### 📊 Facturación Electrónica
+- **Integración SUNAT** para facturación electrónica peruana
+- **Generación XML/PDF** automática de comprobantes
+- **Boletas y Facturas** con numeración secuencial
+- **Cumplimiento Normativo** con validaciones SUNAT
+
+### 📦 Gestión de Inventarios
+- **Control de Stock** en tiempo real
+- **Gestión de Almacenes** con ubicaciones específicas
+- **Visualización 2D/3D** de ubicaciones de productos
+- **Sistema de Unidades** con conversiones automáticas
+- **Trazabilidad Completa** de movimientos de inventario
+
+### 📈 Análisis y Reportes
+- **Dashboard de Ventas** con gráficos interactivos
+- **Reportes de Inventario** y movimientos de stock
+- **Análisis de Tendencias** de ventas por período
+- **Métricas en Tiempo Real** del negocio
+
+## 🛠️ Tecnologías
 
 - **Vue 3** con Composition API y sintaxis `<script setup>`
-- **TypeScript** para mayor seguridad de tipos
+- **TypeScript** para mayor seguridad de tipos y mejor DX
 - **TailwindCSS v4** con sistema de componentes shadcn/ui
 - **Pinia** para gestión de estado reactiva
-- **Supabase** integrado (base de datos, autenticación, tiempo real)
+- **Supabase** (PostgreSQL, Auth, Storage, Realtime)
+- **ApexCharts** para visualizaciones interactivas
 - **Vitest** para testing unitario
 - **ESLint + Prettier** para calidad de código
 
