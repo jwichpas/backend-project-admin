@@ -92,14 +92,18 @@ const formatCurrency = (value: number) => {
 }
 
 const formatMonth = (value: string) => {
-  const date = new Date(value)
+  // Extract year and month from ISO string to avoid timezone issues
+  const dateStr = value.slice(0, 10) // Get YYYY-MM-DD part
+  const [year, month] = dateStr.split('-')
+  const date = new Date(parseInt(year), parseInt(month) - 1, 1) // Month is 0-indexed
   return date.toLocaleDateString('es-PE', { month: 'short', year: '2-digit' })
 }
 
 const sortedMetrics = computed(() =>
-  [...props.metrics].sort((a, b) =>
-    new Date(a.sale_month).getTime() - new Date(b.sale_month).getTime()
-  )
+  [...props.metrics].sort((a, b) => {
+    // Use string comparison for ISO dates to avoid timezone issues
+    return a.sale_month.localeCompare(b.sale_month)
+  })
 )
 
 // Trend series data
@@ -115,15 +119,15 @@ const trendSeries = computed(() => {
   return [
     {
       name: 'Ganancia Bruta',
-      data: sortedMetrics.value.map(metric => metric.gross_profit || 0)
+      data: sortedMetrics.value.map(metric => metric.gross_profit_local || 0)
     },
     {
       name: 'Ventas',
-      data: sortedMetrics.value.map(metric => metric.total_sales || 0)
+      data: sortedMetrics.value.map(metric => metric.total_sales_local || 0)
     },
     {
       name: 'Costo de Ventas',
-      data: sortedMetrics.value.map(metric => metric.cost_of_goods_sold || 0)
+      data: sortedMetrics.value.map(metric => metric.cost_of_goods_sold_local || 0)
     }
   ]
 })
@@ -150,15 +154,15 @@ const comparisonSeries = computed(() => {
   return [
     {
       name: 'Ganancia',
-      data: recentMetrics.value.map(metric => metric.gross_profit || 0)
+      data: recentMetrics.value.map(metric => metric.gross_profit_local || 0)
     },
     {
       name: 'Costos',
-      data: recentMetrics.value.map(metric => metric.cost_of_goods_sold || 0)
+      data: recentMetrics.value.map(metric => metric.cost_of_goods_sold_local || 0)
     },
     {
       name: 'Ventas',
-      data: recentMetrics.value.map(metric => metric.total_sales || 0)
+      data: recentMetrics.value.map(metric => metric.total_sales_local || 0)
     }
   ]
 })
@@ -173,7 +177,7 @@ const comparisonCategories = computed(() => {
 // Key metrics calculations
 const averageMargin = computed(() => {
   const validMargins = sortedMetrics.value
-    .map(metric => metric.gross_margin_percentage)
+    .map(metric => metric.gross_margin_percentage_local)
     .filter(margin => margin !== null && !isNaN(margin))
 
   return validMargins.length > 0
@@ -182,11 +186,11 @@ const averageMargin = computed(() => {
 })
 
 const bestMonthProfit = computed(() =>
-  Math.max(...sortedMetrics.value.map(metric => metric.gross_profit || 0), 0)
+  Math.max(...sortedMetrics.value.map(metric => metric.gross_profit_local || 0), 0)
 )
 
 const totalProfit = computed(() =>
-  sortedMetrics.value.reduce((sum, metric) => sum + (metric.gross_profit || 0), 0)
+  sortedMetrics.value.reduce((sum, metric) => sum + (metric.gross_profit_local || 0), 0)
 )
 
 const profitTrend = computed(() => {
@@ -195,8 +199,8 @@ const profitTrend = computed(() => {
   const recent = sortedMetrics.value.slice(-3)
   const older = sortedMetrics.value.slice(-6, -3)
 
-  const recentAvg = recent.reduce((sum, metric) => sum + (metric.gross_profit || 0), 0) / recent.length
-  const olderAvg = older.reduce((sum, metric) => sum + (metric.gross_profit || 0), 0) / older.length
+  const recentAvg = recent.reduce((sum, metric) => sum + (metric.gross_profit_local || 0), 0) / recent.length
+  const olderAvg = older.reduce((sum, metric) => sum + (metric.gross_profit_local || 0), 0) / older.length
 
   return olderAvg > 0 ? ((recentAvg - olderAvg) / olderAvg) * 100 : 0
 })

@@ -167,8 +167,8 @@
 
     <!-- Advanced Charts Section -->
     <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
-      <!-- Top Products Chart -->
-      <TopProductsChart
+      <!-- Top Products Table -->
+      <TopProductsTable
         :products="topProductsByValue"
         :theme="currentTheme"
         :max-items="10"
@@ -277,7 +277,7 @@ import {
 } from 'lucide-vue-next'
 import Button from '@/components/ui/Button.vue'
 import SalesTrendChart from '@/components/dashboard/SalesTrendChart.vue'
-import TopProductsChart from '@/components/dashboard/TopProductsChart.vue'
+import TopProductsTable from '@/components/dashboard/TopProductsTable.vue'
 import SalesChannelChart from '@/components/dashboard/SalesChannelChart.vue'
 import ProfitabilityChart from '@/components/dashboard/ProfitabilityChart.vue'
 

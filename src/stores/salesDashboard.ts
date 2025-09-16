@@ -161,16 +161,20 @@ export interface SalesChannelMonthly {
 export interface ProfitabilityMetricsMonthly {
   company_id: string
   sale_month: string
-  sale_year: number
-  sale_month_number: number
-  total_sales: number
-  cost_of_goods_sold: number
-  gross_profit: number
-  gross_margin_percentage: number
-  total_taxes: number
-  total_discounts: number
-  transaction_count: number
-  avg_transaction_value: number
+  sale_year?: number
+  sale_month_number?: number
+  total_sales?: number
+  total_sales_local: number
+  cost_of_goods_sold?: number
+  cost_of_goods_sold_local: number
+  gross_profit?: number
+  gross_profit_local: number
+  gross_margin_percentage?: number
+  gross_margin_percentage_local: number
+  total_taxes?: number
+  total_discounts?: number
+  transaction_count?: number
+  avg_transaction_value?: number
 }
 
 export const useSalesDashboardStore = defineStore('salesDashboard', () => {

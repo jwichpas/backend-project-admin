@@ -1,19 +1,18 @@
 <template>
   <div class="w-full">
-    <apexchart
+    <SafeApexChart
       :type="type"
       :height="height"
       :options="chartOptions"
       :series="series"
+      :min-data-points="1"
     />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import VueApexCharts from 'vue3-apexcharts'
-
-const apexchart = VueApexCharts
+import SafeApexChart from './SafeApexChart.vue'
 
 interface Props {
   series: number[]
@@ -36,6 +35,7 @@ const props = withDefaults(defineProps<Props>(), {
   dataLabels: true,
   theme: 'light'
 })
+
 
 const chartOptions = computed(() => ({
   chart: {

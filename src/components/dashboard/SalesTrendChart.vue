@@ -81,7 +81,11 @@ const formatCurrency = (value: number) => {
 }
 
 const formatDate = (value: string) => {
-  const date = new Date(value)
+  // Extract year and month from ISO string to avoid timezone issues
+  const dateStr = value.slice(0, 10) // Get YYYY-MM-DD part
+  const [year, month] = dateStr.split('-')
+  const date = new Date(parseInt(year), parseInt(month) - 1, 1) // Month is 0-indexed
+
   if (selectedPeriod.value === 'monthly') {
     return date.toLocaleDateString('es-PE', { month: 'short', year: '2-digit' })
   } else if (selectedPeriod.value === 'quarterly') {
@@ -94,7 +98,7 @@ const formatDate = (value: string) => {
 
 const processedData = computed(() => {
   let data = [...props.monthlyTrend].sort((a, b) =>
-    new Date(a.sale_month).getTime() - new Date(b.sale_month).getTime()
+    a.sale_month.localeCompare(b.sale_month)
   )
 
   if (selectedPeriod.value === 'quarterly') {
