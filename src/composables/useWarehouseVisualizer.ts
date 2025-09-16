@@ -1,20 +1,29 @@
 import { ref, computed, type Ref } from 'vue'
 import { supabase } from '@/lib/supabase'
-import type { ProductLocation, WarehouseZone, Warehouse, Product } from '@/stores/products'
+import type {
+  Warehouse,
+  WarehouseZone,
+  WarehouseAisle,
+  WarehouseShelf,
+  WarehouseShelfPosition,
+  ProductLocationDetailed
+} from '@/composables/useWarehouseManager'
 
-export interface WarehouseWithZones extends Warehouse {
-  zones?: WarehouseZone[]
-}
-
-export interface LocationWithProduct extends ProductLocation {
-  product?: Product
-  zone?: WarehouseZone
+export interface Product {
+  id: string
+  name: string
+  sku: string
+  description?: string
+  active: boolean
 }
 
 export interface WarehouseVisualizerData {
-  warehouse: WarehouseWithZones
-  locations: LocationWithProduct[]
+  warehouse: Warehouse
   zones: WarehouseZone[]
+  aisles: WarehouseAisle[]
+  shelves: WarehouseShelf[]
+  shelfPositions: WarehouseShelfPosition[]
+  productLocations: ProductLocationDetailed[]
 }
 
 export function useWarehouseVisualizer() {
@@ -27,60 +36,69 @@ export function useWarehouseVisualizer() {
 
   const warehouses = ref<Warehouse[]>([])
   const zones = ref<WarehouseZone[]>([])
-  const locations = ref<LocationWithProduct[]>([])
+  const aisles = ref<WarehouseAisle[]>([])
+  const shelves = ref<WarehouseShelf[]>([])
+  const shelfPositions = ref<WarehouseShelfPosition[]>([])
+  const productLocations = ref<ProductLocationDetailed[]>([])
   const products = ref<Product[]>([])
 
   // Computed properties
   const selectedWarehouseData = computed(() => {
-    if (!selectedWarehouse.value) {
-      // If no warehouse is selected, use the first available warehouse
-      if (warehouses.value.length > 0) {
-        const firstWarehouse = warehouses.value[0]
-        const warehouseZones = zones.value.filter(z => z.warehouse_id === firstWarehouse.id)
-        const warehouseLocations = locations.value.filter(l => 
-          !l.warehouse_zone_id || warehouseZones.some(z => z.id === l.warehouse_zone_id)
-        )
-        
-        console.log('🎨 Using first warehouse as default:', firstWarehouse.name, 'with', warehouseLocations.length, 'locations')
-        
-        return {
-          warehouse: { ...firstWarehouse, zones: warehouseZones },
-          locations: warehouseLocations,
-          zones: warehouseZones
-        } as WarehouseVisualizerData
-      }
-      return null
-    }
-    
-    const warehouse = warehouses.value.find(w => w.id === selectedWarehouse.value)
+    const warehouse = selectedWarehouse.value
+      ? warehouses.value.find(w => w.id === selectedWarehouse.value)
+      : warehouses.value[0] // Use first warehouse as default
+
     if (!warehouse) return null
 
     const warehouseZones = zones.value.filter(z => z.warehouse_id === warehouse.id)
-    // Include locations that either have no zone assigned OR belong to this warehouse's zones
-    const warehouseLocations = locations.value.filter(l => 
-      !l.warehouse_zone_id || warehouseZones.some(z => z.id === l.warehouse_zone_id)
+    const warehouseAisles = aisles.value.filter(a =>
+      warehouseZones.some(z => z.id === a.warehouse_zone_id)
     )
-
-    console.log('🎯 Selected warehouse data for:', warehouse.name, 'zones:', warehouseZones.length, 'locations:', warehouseLocations.length)
+    const warehouseShelves = shelves.value.filter(s =>
+      warehouseAisles.some(a => a.id === s.warehouse_aisle_id)
+    )
+    const warehouseShelfPositions = shelfPositions.value.filter(sp =>
+      warehouseShelves.some(s => s.id === sp.warehouse_shelf_id)
+    )
+    const warehouseProductLocations = productLocations.value.filter(pl => {
+      // Handle both detailed view field names and basic table field names
+      const locationZoneId = pl.warehouse_zone_id || pl.zone_id
+      return warehouseZones.some(z => z.id === locationZoneId)
+    })
 
     return {
-      warehouse: { ...warehouse, zones: warehouseZones },
-      locations: warehouseLocations,
-      zones: warehouseZones
+      warehouse,
+      zones: warehouseZones,
+      aisles: warehouseAisles,
+      shelves: warehouseShelves,
+      shelfPositions: warehouseShelfPositions,
+      productLocations: warehouseProductLocations
     } as WarehouseVisualizerData
   })
 
   const filteredLocations = computed(() => {
-    let filtered = locations.value
+    // If no warehouse selected, show all locations
+    if (!selectedWarehouseData.value) {
+      let filtered = productLocations.value
 
-    if (selectedWarehouse.value) {
-      const warehouseZoneIds = zones.value
-        .filter(z => z.warehouse_id === selectedWarehouse.value)
-        .map(z => z.id)
-      filtered = filtered.filter(l => 
-        l.warehouse_zone_id && warehouseZoneIds.includes(l.warehouse_zone_id)
-      )
+      if (selectedProduct.value) {
+        filtered = filtered.filter(l => l.product_id === selectedProduct.value)
+      }
+
+      if (searchQuery.value) {
+        const query = searchQuery.value.toLowerCase()
+        filtered = filtered.filter(l => {
+          return (
+            (l.product_name && l.product_name.toLowerCase().includes(query)) ||
+            (l.product_sku && l.product_sku.toLowerCase().includes(query))
+          )
+        })
+      }
+
+      return filtered
     }
+
+    let filtered = selectedWarehouseData.value.productLocations
 
     if (selectedProduct.value) {
       filtered = filtered.filter(l => l.product_id === selectedProduct.value)
@@ -89,10 +107,9 @@ export function useWarehouseVisualizer() {
     if (searchQuery.value) {
       const query = searchQuery.value.toLowerCase()
       filtered = filtered.filter(l => {
-        const product = l.product
-        return product && (
-          product.name.toLowerCase().includes(query) ||
-          product.sku.toLowerCase().includes(query)
+        return (
+          (l.product_name && l.product_name.toLowerCase().includes(query)) ||
+          (l.product_sku && l.product_sku.toLowerCase().includes(query))
         )
       })
     }
@@ -101,35 +118,21 @@ export function useWarehouseVisualizer() {
   })
 
   const warehouseBounds = computed(() => {
-    if (!selectedWarehouseData.value) {
-      // Provide default bounds if there are locations but no warehouse data
-      if (locations.value.length > 0) {
-        console.log('📜 Using default warehouse bounds because we have locations but no warehouse data')
-        return {
-          width: 100,
-          height: 20,
-          length: 80
-        }
-      }
-      return null
-    }
-    
+    if (!selectedWarehouseData.value) return null
+
     const warehouse = selectedWarehouseData.value.warehouse
-    const bounds = {
+    return {
       width: warehouse.width || 100,
       height: warehouse.height || 20,
       length: warehouse.length || 80
     }
-    console.log('🏗️ Warehouse bounds calculated:', bounds)
-    return bounds
   })
 
   // Methods
   const fetchWarehouses = async (companyId: string) => {
     try {
       loading.value = true
-      console.log('🔄 Fetching warehouses for company:', companyId)
-      
+
       const { data, error: err } = await supabase
         .from('warehouses')
         .select('*')
@@ -139,10 +142,9 @@ export function useWarehouseVisualizer() {
 
       if (err) throw err
       warehouses.value = data || []
-      console.log('✅ Warehouses fetched:', warehouses.value.length, warehouses.value)
     } catch (err: any) {
       error.value = err.message
-      console.error('❌ Error fetching warehouses:', err)
+      console.error('Error fetching warehouses:', err)
     } finally {
       loading.value = false
     }
@@ -151,8 +153,7 @@ export function useWarehouseVisualizer() {
   const fetchWarehouseZones = async (companyId: string, warehouseId?: string) => {
     try {
       loading.value = true
-      console.log('🔄 Fetching zones for company:', companyId, 'warehouse:', warehouseId)
-      
+
       let query = supabase
         .from('warehouse_zones')
         .select('*')
@@ -167,10 +168,68 @@ export function useWarehouseVisualizer() {
 
       if (err) throw err
       zones.value = data || []
-      console.log('✅ Zones fetched:', zones.value.length, zones.value)
     } catch (err: any) {
       error.value = err.message
-      console.error('❌ Error fetching zones:', err)
+      console.error('Error fetching zones:', err)
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const fetchWarehouseAisles = async (companyId: string) => {
+    try {
+      loading.value = true
+      const { data, error: err } = await supabase
+        .from('warehouse_aisles')
+        .select('*')
+        .eq('company_id', companyId)
+        .is('deleted_at', null)
+        .order('code')
+
+      if (err) throw err
+      aisles.value = data || []
+    } catch (err: any) {
+      error.value = err.message
+      console.error('Error fetching aisles:', err)
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const fetchWarehouseShelves = async (companyId: string) => {
+    try {
+      loading.value = true
+      const { data, error: err } = await supabase
+        .from('warehouse_shelves')
+        .select('*')
+        .eq('company_id', companyId)
+        .is('deleted_at', null)
+        .order('code')
+
+      if (err) throw err
+      shelves.value = data || []
+    } catch (err: any) {
+      error.value = err.message
+      console.error('Error fetching shelves:', err)
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const fetchShelfPositions = async (companyId: string) => {
+    try {
+      loading.value = true
+      const { data, error: err } = await supabase
+        .from('warehouse_shelf_positions')
+        .select('*')
+        .eq('company_id', companyId)
+        .order('location_code')
+
+      if (err) throw err
+      shelfPositions.value = data || []
+    } catch (err: any) {
+      error.value = err.message
+      console.error('Error fetching shelf positions:', err)
     } finally {
       loading.value = false
     }
@@ -196,53 +255,60 @@ export function useWarehouseVisualizer() {
     }
   }
 
-  const fetchProductLocations = async (companyId: string, warehouseId?: string) => {
+  const fetchDetailedProductLocations = async (companyId: string, warehouseId?: string) => {
     try {
       loading.value = true
-      console.log('🔄 Fetching product locations for company:', companyId, 'warehouse:', warehouseId)
-      
-      // First get all locations
-      let locationQuery = supabase
-        .from('product_location')
+      console.log('🔍 Fetching detailed product locations for company:', companyId, 'warehouse:', warehouseId)
+
+      // First try the detailed view
+      let query = supabase
+        .from('v_product_locations_detailed')
         .select('*')
-        .eq('estado', true)
-        .order('created_at', { ascending: false })
 
-      const { data: locationData, error: locationError } = await locationQuery
-
-      if (locationError) throw locationError
-      console.log('📍 Raw location data:', locationData?.length || 0, locationData)
-      
-      // Enrich locations with product and zone data
-      const enrichedLocations: LocationWithProduct[] = (locationData || []).map(location => {
-        const product = products.value.find(p => p.id === location.product_id)
-        const zone = zones.value.find(z => z.id === location.warehouse_zone_id)
-        
-        return {
-          ...location,
-          product,
-          zone
-        }
-      })
-
-      // Filter by warehouse if specified
       if (warehouseId) {
-        const warehouseZoneIds = zones.value
-          .filter(z => z.warehouse_id === warehouseId)
-          .map(z => z.id)
-        
-        locations.value = enrichedLocations.filter(l => 
-          l.warehouse_zone_id && warehouseZoneIds.includes(l.warehouse_zone_id)
-        )
-        console.log('✅ Filtered locations for warehouse:', locations.value.length)
-      } else {
-        locations.value = enrichedLocations
-        console.log('✅ All locations loaded:', locations.value.length)
+        query = query.eq('warehouse_id', warehouseId)
       }
 
+      const { data, error: err } = await query.order('warehouse_name').order('zone_code').order('aisle_code').order('shelf_code')
+
+      if (err) {
+        console.warn('❌ Detailed view failed:', err.message)
+        console.log('🔄 Trying fallback query to product_location...')
+
+        // Fallback to basic product_location table
+        const { data: basicData, error: basicErr } = await supabase
+          .from('product_location')
+          .select(`
+            id,
+            product_id,
+            warehouse_zone_id,
+            warehouse_shelf_position_id,
+            position_x,
+            position_y,
+            position_z,
+            capacity_max,
+            stock_actual,
+            es_principal,
+            estado,
+            created_at,
+            updated_at
+          `)
+          .eq('estado', true)
+          .order('created_at', { ascending: false })
+
+        if (basicErr) {
+          throw basicErr
+        }
+
+        console.log('📊 Basic product_location data:', basicData?.length || 0, 'records')
+        productLocations.value = basicData || []
+      } else {
+        console.log('📊 Detailed product locations found:', data?.length || 0, 'records')
+        productLocations.value = data || []
+      }
     } catch (err: any) {
       error.value = err.message
-      console.error('❌ Error fetching locations:', err)
+      console.error('❌ Error fetching detailed product locations:', err)
     } finally {
       loading.value = false
     }
@@ -251,25 +317,43 @@ export function useWarehouseVisualizer() {
   const initializeData = async (companyId: string, warehouseId?: string) => {
     try {
       loading.value = true
-      
-      // Fetch data in sequence for dependencies
-      await fetchWarehouses(companyId)
-      await fetchWarehouseZones(companyId, warehouseId)
-      await fetchProducts(companyId)
-      await fetchProductLocations(companyId, warehouseId)
+
+      // Fetch all data in parallel
+      await Promise.all([
+        fetchWarehouses(companyId),
+        fetchWarehouseZones(companyId, warehouseId),
+        fetchWarehouseAisles(companyId),
+        fetchWarehouseShelves(companyId),
+        fetchShelfPositions(companyId),
+        fetchProducts(companyId),
+        fetchDetailedProductLocations(companyId, warehouseId)
+      ])
 
       if (warehouseId) {
         selectedWarehouse.value = warehouseId
-        console.log('🎯 Selected warehouse set to:', warehouseId)
       } else if (warehouses.value.length > 0) {
-        selectedWarehouse.value = warehouses.value[0].id
-        console.log('🎯 Auto-selected first warehouse:', warehouses.value[0].name, warehouses.value[0].id)
-      } else {
-        console.log('⚠️ No warehouses available to select')
+        // Auto-select first warehouse with most data
+        let bestWarehouse = warehouses.value[0]
+        let bestScore = 0
+
+        for (const warehouse of warehouses.value) {
+          const warehouseZones = zones.value.filter(z => z.warehouse_id === warehouse.id)
+          const warehouseLocations = productLocations.value.filter(pl =>
+            warehouseZones.some(z => z.id === pl.warehouse_zone_id)
+          )
+          const score = warehouseZones.length + warehouseLocations.length
+
+          if (score > bestScore) {
+            bestWarehouse = warehouse
+            bestScore = score
+          }
+        }
+
+        selectedWarehouse.value = bestWarehouse.id
       }
     } catch (err: any) {
       error.value = err.message
-      console.error('❌ Error initializing data:', err)
+      console.error('Error initializing data:', err)
     } finally {
       loading.value = false
     }
@@ -279,11 +363,8 @@ export function useWarehouseVisualizer() {
     viewMode.value = mode
   }
 
-  const setSelectedWarehouse = async (warehouseId: string | null) => {
+  const setSelectedWarehouse = (warehouseId: string | null) => {
     selectedWarehouse.value = warehouseId
-    if (warehouseId && zones.value.length === 0) {
-      await fetchWarehouseZones(warehouseId, warehouseId)
-    }
   }
 
   const setSelectedProduct = (productId: string | null) => {
@@ -294,31 +375,29 @@ export function useWarehouseVisualizer() {
     searchQuery.value = query
   }
 
-  const getProductByLocation = (location: ProductLocation) => {
-    return products.value.find(p => p.id === location.product_id)
-  }
-
-  const getZoneByLocation = (location: ProductLocation) => {
-    return zones.value.find(z => z.id === location.warehouse_zone_id)
-  }
-
-  const getWarehouseByZone = (zone: WarehouseZone) => {
-    return warehouses.value.find(w => w.id === zone.warehouse_id)
-  }
-
-  // Helper methods for 3D positioning
-  const get3DPosition = (location: ProductLocation) => {
+  // Helper methods for positioning with hierarchical structure
+  const get3DPosition = (location: ProductLocationDetailed) => {
     return {
-      x: location.position_x || 0,
-      y: location.position_z || 0, // Z becomes Y in 3D space (height)
-      z: -(location.position_y || 0) // Y becomes -Z in 3D space (depth, negative for proper orientation)
+      x: location.final_x || 0,
+      y: location.final_z || 0, // Z becomes Y in 3D space (height)
+      z: -(location.final_y || 0) // Y becomes -Z in 3D space (depth, negative for proper orientation)
     }
   }
 
-  const get2DPosition = (location: ProductLocation) => {
+  const get2DPosition = (location: ProductLocationDetailed) => {
     return {
-      x: location.position_x || 0,
-      y: location.position_y || 0
+      x: location.final_x || 0,
+      y: location.final_y || 0
+    }
+  }
+
+  const getLocationHierarchy = (location: ProductLocationDetailed) => {
+    return {
+      warehouse: location.warehouse_name || 'Sin almacén',
+      zone: location.zone_name || 'Sin zona',
+      aisle: location.aisle_name || 'Sin pasillo',
+      shelf: location.shelf_name || 'Sin estante',
+      position: location.full_location_code || 'Sin posición'
     }
   }
 
@@ -334,7 +413,10 @@ export function useWarehouseVisualizer() {
     // Data
     warehouses: readonly(warehouses),
     zones: readonly(zones),
-    locations: readonly(locations),
+    aisles: readonly(aisles),
+    shelves: readonly(shelves),
+    shelfPositions: readonly(shelfPositions),
+    productLocations: readonly(productLocations),
     products: readonly(products),
     
     // Computed
@@ -346,17 +428,18 @@ export function useWarehouseVisualizer() {
     initializeData,
     fetchWarehouses,
     fetchWarehouseZones,
+    fetchWarehouseAisles,
+    fetchWarehouseShelves,
+    fetchShelfPositions,
     fetchProducts,
-    fetchProductLocations,
+    fetchDetailedProductLocations,
     setViewMode,
     setSelectedWarehouse,
     setSelectedProduct,
     setSearchQuery,
-    getProductByLocation,
-    getZoneByLocation,
-    getWarehouseByZone,
     get3DPosition,
-    get2DPosition
+    get2DPosition,
+    getLocationHierarchy
   }
 }
 

@@ -39,7 +39,7 @@
             Vista 3D
           </Button>
         </div>
-        
+
         <Button variant="outline" size="sm" @click="showCreateDialog = true">
           <Plus class="mr-2 h-4 w-4" />
           Nueva Ubicación
@@ -102,17 +102,17 @@
                       <MapPin class="h-4 w-4 text-white" />
                     </div>
                     <div>
-                      <p class="font-medium">{{ location.product?.name || 'Sin nombre' }}</p>
+                      <p class="font-medium">{{ location.product_name || 'Sin nombre' }}</p>
                     </div>
                   </div>
                 </TableCell>
                 <TableCell>
                   <code class="bg-muted px-2 py-1 rounded text-sm">
-                    {{ location.product?.sku || '-' }}
+                    {{ location.product_sku || '-' }}
                   </code>
                 </TableCell>
-                <TableCell>{{ getWarehouseName(location) }}</TableCell>
-                <TableCell>{{ location.zone?.name || '-' }}</TableCell>
+                <TableCell>{{ location.warehouse_name }}</TableCell>
+                <TableCell>{{ location.zone_name || '-' }}</TableCell>
                 <TableCell>
                   <div class="font-mono text-sm">
                     <span v-if="location.position_x !== null && location.position_y !== null">
@@ -131,9 +131,9 @@
                 <TableCell>
                   <div class="flex items-center gap-2">
                     <span class="font-medium">{{ location.stock_actual }}</span>
-                    <Badge 
-                      v-if="location.capacity_max && location.stock_actual >= location.capacity_max" 
-                      variant="warning" 
+                    <Badge
+                      v-if="location.capacity_max && location.stock_actual >= location.capacity_max"
+                      variant="warning"
                       class="text-xs"
                     >
                       Lleno
@@ -152,17 +152,17 @@
                 </TableCell>
                 <TableCell class="text-right">
                   <div class="flex items-center justify-end gap-1">
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       class="h-8 w-8"
                       @click="editLocation(location)"
                     >
                       <Edit class="h-4 w-4" />
                     </Button>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       class="h-8 w-8 text-destructive hover:text-destructive"
                       @click="deleteLocation(location)"
                     >
@@ -207,7 +207,7 @@
             {{ editingLocation ? 'Editar Ubicación' : 'Nueva Ubicación' }}
           </DialogTitle>
         </DialogHeader>
-        
+
         <form @submit.prevent="submitForm" class="space-y-4">
           <div class="grid gap-4 md:grid-cols-2">
             <div>
@@ -218,16 +218,16 @@
                 required
               >
                 <option value="">Seleccionar producto</option>
-                <option 
-                  v-for="product in warehouseVisualizer.products.value" 
-                  :key="product.id" 
+                <option
+                  v-for="product in warehouseVisualizer.products.value"
+                  :key="product.id"
                   :value="product.id"
                 >
                   {{ product.name }} ({{ product.sku }})
                 </option>
               </select>
             </div>
-            
+
             <div>
               <label class="text-sm font-medium">Zona del Almacén</label>
               <select
@@ -235,9 +235,9 @@
                 class="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <option value="">Sin zona específica</option>
-                <option 
-                  v-for="zone in warehouseVisualizer.zones.value" 
-                  :key="zone.id" 
+                <option
+                  v-for="zone in warehouseVisualizer.zones.value"
+                  :key="zone.id"
                   :value="zone.id"
                 >
                   {{ zone.code }} - {{ zone.name }}
@@ -428,10 +428,10 @@ const onZoneSelected = (zone: any) => {
 
 const getWarehouseName = (location: LocationWithProduct): string => {
   if (!location.warehouse_zone_id) return '-'
-  
+
   const zone = warehouseVisualizer.zones.value.find(z => z.id === location.warehouse_zone_id)
   if (!zone) return '-'
-  
+
   return warehouseVisualizer.warehouses.value.find(w => w.id === zone.warehouse_id)?.name || '-'
 }
 
@@ -517,7 +517,7 @@ const submitForm = async () => {
         )
       }
     }
-    
+
     cancelForm()
   } catch (error) {
     console.error('Error saving location:', error)
@@ -543,16 +543,16 @@ const cancelForm = () => {
 onMounted(async () => {
   if (companyStore.selectedCompany) {
     console.log('🏢 Selected company:', companyStore.selectedCompany)
-    
+
     await warehouseVisualizer.initializeData(companyStore.selectedCompany.id)
-    
+
     // Debug warehouse data
     console.log('🏭 Warehouses loaded:', warehouseVisualizer.warehouses.value)
     console.log('📦 Zones loaded:', warehouseVisualizer.zones.value)
     console.log('📍 Locations loaded:', warehouseVisualizer.locations.value)
     console.log('🏗️ Selected warehouse data:', warehouseVisualizer.selectedWarehouseData.value)
     console.log('📐 Warehouse bounds:', warehouseVisualizer.warehouseBounds.value)
-    
+
     // Also load basic products data for the form
     await Promise.all([
       productsStore.fetchProducts(companyStore.selectedCompany.id),

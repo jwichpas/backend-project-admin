@@ -1520,14 +1520,28 @@ BEGIN
 
     -- Moneda local
     IF NEW.total IS NOT NULL THEN
-
+        -- OPERACIONES GRAVADAS
         NEW.total_ope_gravadas_local := convert_currency(NEW.total_ope_gravadas, NEW.currency_code, v_local, NEW.issue_date);
         -- Siempre convertir a USD
         NEW.total_ope_gravadas_usd := convert_currency(NEW.total_ope_gravadas, NEW.currency_code, 'USD', NEW.issue_date);
         -- Siempre convertir a CLP
         NEW.total_ope_gravadas_clp := convert_currency(NEW.total_ope_gravadas, NEW.currency_code, 'CLP', NEW.issue_date);
 
+        -- OPERACIONES EXONERADAS
+        NEW.total_ope_exoneradas_local := convert_currency(NEW.total_ope_exoneradas, NEW.currency_code, v_local, NEW.issue_date);
+        -- Siempre convertir a USD
+        NEW.total_ope_exoneradas_usd := convert_currency(NEW.total_ope_exoneradas, NEW.currency_code, 'USD', NEW.issue_date);
+        -- Siempre convertir a CLP
+        NEW.total_ope_exoneradas_clp := convert_currency(NEW.total_ope_exoneradas, NEW.currency_code, 'CLP', NEW.issue_date);
 
+        -- IGV
+        NEW.total_igv_local := convert_currency(NEW.total_igv, NEW.currency_code, v_local, NEW.issue_date);
+        -- Siempre convertir a USD
+        NEW.total_igv_usd := convert_currency(NEW.total_igv, NEW.currency_code, 'USD', NEW.issue_date);
+        -- Siempre convertir a CLP
+        NEW.total_igv_clp := convert_currency(NEW.total_igv, NEW.currency_code, 'CLP', NEW.issue_date);
+
+        -- TOTALES
         NEW.total_local := convert_currency(NEW.total, NEW.currency_code, v_local, NEW.issue_date);
         -- Siempre convertir a USD
         NEW.total_usd := convert_currency(NEW.total, NEW.currency_code, 'USD', NEW.issue_date);
@@ -1558,30 +1572,54 @@ RETURNS TRIGGER AS $$
 DECLARE
     v_local VARCHAR(3);
 BEGIN
+    -- Moneda local de la empresa
     SELECT currency_code INTO v_local
-    FROM companies WHERE id = NEW.company_id;
+    FROM companies
+    WHERE id = NEW.company_id;
 
-    -- Convertir total cost a monedas de referencia
+    -- ========================================================
+    -- Balance
+    -- ========================================================
     IF NEW.balance_total_cost IS NOT NULL THEN
-        NEW.balance_unit_cost_local :=
-            convert_currency(NEW.balance_unit_cost, NEW.original_currency_code, v_local, NEW.movement_date);
+        IF NEW.balance_unit_cost IS NOT NULL THEN
+            NEW.balance_unit_cost_local := convert_currency(NEW.balance_unit_cost, NEW.original_currency_code, v_local, NEW.movement_date);
+            NEW.balance_unit_cost_usd   := convert_currency(NEW.balance_unit_cost, NEW.original_currency_code, 'USD', NEW.movement_date);
+            NEW.balance_unit_cost_clp   := convert_currency(NEW.balance_unit_cost, NEW.original_currency_code, 'CLP', NEW.movement_date);
+        END IF;
 
-        NEW.balance_unit_cost_usd :=
-            convert_currency(NEW.balance_unit_cost, NEW.original_currency_code, 'USD', NEW.movement_date);
+        NEW.balance_total_cost_local := convert_currency(NEW.balance_total_cost, NEW.original_currency_code, v_local, NEW.movement_date);
+        NEW.balance_total_cost_usd   := convert_currency(NEW.balance_total_cost, NEW.original_currency_code, 'USD', NEW.movement_date);
+        NEW.balance_total_cost_clp   := convert_currency(NEW.balance_total_cost, NEW.original_currency_code, 'CLP', NEW.movement_date);
+    END IF;
 
-        NEW.balance_unit_cost_clp :=
-            convert_currency(NEW.balance_unit_cost, NEW.original_currency_code, 'CLP', NEW.movement_date);
+    -- ========================================================
+    -- Ingresos
+    -- ========================================================
+    IF NEW.total_cost_in IS NOT NULL THEN
+        IF NEW.unit_cost_in IS NOT NULL THEN
+            NEW.unit_cost_in_local := convert_currency(NEW.unit_cost_in, NEW.original_currency_code, v_local, NEW.movement_date);
+            NEW.unit_cost_in_usd   := convert_currency(NEW.unit_cost_in, NEW.original_currency_code, 'USD', NEW.movement_date);
+            NEW.unit_cost_in_clp   := convert_currency(NEW.unit_cost_in, NEW.original_currency_code, 'CLP', NEW.movement_date);
+        END IF;
 
+        NEW.total_cost_in_local := convert_currency(NEW.total_cost_in, NEW.original_currency_code, v_local, NEW.movement_date);
+        NEW.total_cost_in_usd   := convert_currency(NEW.total_cost_in, NEW.original_currency_code, 'USD', NEW.movement_date);
+        NEW.total_cost_in_clp   := convert_currency(NEW.total_cost_in, NEW.original_currency_code, 'CLP', NEW.movement_date);
+    END IF;
 
+    -- ========================================================
+    -- Egresos
+    -- ========================================================
+    IF NEW.total_cost_out IS NOT NULL THEN
+        IF NEW.unit_cost_out IS NOT NULL THEN
+            NEW.unit_cost_out_local := convert_currency(NEW.unit_cost_out, NEW.original_currency_code, v_local, NEW.movement_date);
+            NEW.unit_cost_out_usd   := convert_currency(NEW.unit_cost_out, NEW.original_currency_code, 'USD', NEW.movement_date);
+            NEW.unit_cost_out_clp   := convert_currency(NEW.unit_cost_out, NEW.original_currency_code, 'CLP', NEW.movement_date);
+        END IF;
 
-        NEW.balance_total_cost_local :=
-            convert_currency(NEW.balance_total_cost, NEW.original_currency_code, v_local, NEW.movement_date);
-
-        NEW.balance_total_cost_usd :=
-            convert_currency(NEW.balance_total_cost, NEW.original_currency_code, 'USD', NEW.movement_date);
-
-        NEW.balance_total_cost_clp :=
-            convert_currency(NEW.balance_total_cost, NEW.original_currency_code, 'CLP', NEW.movement_date);
+        NEW.total_cost_out_local := convert_currency(NEW.total_cost_out, NEW.original_currency_code, v_local, NEW.movement_date);
+        NEW.total_cost_out_usd   := convert_currency(NEW.total_cost_out, NEW.original_currency_code, 'USD', NEW.movement_date);
+        NEW.total_cost_out_clp   := convert_currency(NEW.total_cost_out, NEW.original_currency_code, 'CLP', NEW.movement_date);
     END IF;
 
     RETURN NEW;

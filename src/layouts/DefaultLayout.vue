@@ -218,9 +218,44 @@
           </li>
           <li>
             <router-link to="/inventory" class="group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors" :class="getNavClass('/inventory')">
-              <Warehouse class="mr-3 h-5 w-5 transition-colors" :class="getIconClass('/inventory')" />
-              <span v-if="!isCollapsed">Almacenes</span>
+              <Package2 class="mr-3 h-5 w-5 transition-colors" :class="getIconClass('/inventory')" />
+              <span v-if="!isCollapsed">Inventario</span>
             </router-link>
+          </li>
+          <li>
+            <div class="relative">
+              <button
+                @click="toggleWarehousesMenu"
+                class="group flex items-center w-full rounded-md px-3 py-2 text-sm font-medium transition-colors"
+                :class="getNavClass('/warehouses')"
+              >
+                <Warehouse class="mr-3 h-5 w-5 transition-colors" :class="getIconClass('/warehouses')" />
+                <span v-if="!isCollapsed" class="flex-1 text-left">Almacenes</span>
+                <ChevronDown
+                  v-if="!isCollapsed"
+                  class="h-4 w-4 transition-transform"
+                  :class="{ 'rotate-180': warehousesMenuOpen }"
+                />
+              </button>
+
+              <!-- Warehouses Submenu -->
+              <div v-if="warehousesMenuOpen && !isCollapsed" class="mt-1 space-y-1 pl-6">
+                <router-link
+                  to="/warehouses"
+                  class="block rounded-md px-3 py-2 text-sm transition-colors"
+                  :class="getSubmenuClass('/warehouses')"
+                >
+                  Gestión de Almacenes
+                </router-link>
+                <router-link
+                  to="/warehouses/visualizer"
+                  class="block rounded-md px-3 py-2 text-sm transition-colors"
+                  :class="getSubmenuClass('/warehouses/visualizer')"
+                >
+                  Visualizador 2D/3D
+                </router-link>
+              </div>
+            </div>
           </li>
 
           <!-- Logistics Section -->
@@ -493,7 +528,7 @@ import { useThemeStore } from '@/stores/theme'
 import { useAuthStore } from '@/stores/auth'
 import {
   Menu, LayoutDashboard, Settings, Moon, Sun, User,
-  Receipt, Users, ShoppingCart, Truck, Package, Warehouse, BarChart3,
+  Receipt, Users, ShoppingCart, Truck, Package, Package2, Warehouse, BarChart3,
   Building, MapPin, FileText, ChevronDown, Bell, DollarSign, CreditCard, Car
 } from 'lucide-vue-next'
 import Select from '@/components/ui/Select.vue'
@@ -528,6 +563,7 @@ const productsMenuOpen = ref(false)
 const salesMenuOpen = ref(false)
 const purchasesMenuOpen = ref(false)
 const vehiclesMenuOpen = ref(false)
+const warehousesMenuOpen = ref(false)
 const notificationsOpen = ref(false)
 const exchangeRates = ref<ExchangeRate[]>([])
 const notifications = ref<Notification[]>([])
@@ -537,6 +573,7 @@ const toggleProductsMenu = () => { productsMenuOpen.value = !productsMenuOpen.va
 const toggleSalesMenu = () => { salesMenuOpen.value = !salesMenuOpen.value }
 const togglePurchasesMenu = () => { purchasesMenuOpen.value = !purchasesMenuOpen.value }
 const toggleVehiclesMenu = () => { vehiclesMenuOpen.value = !vehiclesMenuOpen.value }
+const toggleWarehousesMenu = () => { warehousesMenuOpen.value = !warehousesMenuOpen.value }
 const toggleNotifications = () => { notificationsOpen.value = !notificationsOpen.value }
 
 // Company and Branch selection
@@ -621,6 +658,8 @@ const getPageTitle = () => {
     'purchases-docs': 'Documentos de Compra', 
     'purchases-receptions': 'Recepciones',
     'inventory': 'Inventario',
+    'warehouses': 'Gestión de Almacenes',
+    'warehouse-visualizer': 'Visualizador de Almacenes',
     'customers': 'Clientes',
     'suppliers': 'Proveedores',
     'vehicles': 'Vehículos',
@@ -763,6 +802,10 @@ watch(route, (newRoute) => {
   // Auto-open vehicles menu when visiting vehicles routes
   if (newRoute.path.startsWith('/vehicles')) {
     vehiclesMenuOpen.value = true
+  }
+  // Auto-open warehouses menu when visiting warehouses routes
+  if (newRoute.path.startsWith('/warehouses')) {
+    warehousesMenuOpen.value = true
   }
 }, { immediate: true })
 

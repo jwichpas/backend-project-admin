@@ -129,6 +129,19 @@ const router = createRouter({
       component: () => import('../views/InventoryView.vue'),
       meta: { requiresAuth: true }
     },
+    // Warehouse management routes
+    {
+      path: '/warehouses',
+      name: 'warehouses',
+      component: () => import('../views/Warehouse/WarehouseManagementView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/warehouses/visualizer',
+      name: 'warehouse-visualizer',
+      component: () => import('../views/Warehouse/WarehouseVisualizerView.vue'),
+      meta: { requiresAuth: true }
+    },
     {
       path: '/customers',
       name: 'customers',

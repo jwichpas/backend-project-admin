@@ -1,0 +1,11 @@
+Model Information:
+* title:	warehouse-exterior-3-6-export-test3
+* source:	https://sketchfab.com/3d-models/warehouse-exterior-3-6-export-test3-c08a1914f48b406ea1932e511e5dd144
+* author:	Issa (https://sketchfab.com/holdmydrink)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "warehouse-exterior-3-6-export-test3" (https://sketchfab.com/3d-models/warehouse-exterior-3-6-export-test3-c08a1914f48b406ea1932e511e5dd144) by Issa (https://sketchfab.com/holdmydrink) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

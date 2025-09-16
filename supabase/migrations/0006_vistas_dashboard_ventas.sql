@@ -240,146 +240,152 @@ $$ LANGUAGE plpgsql;
 
 -- Vista Materializada de Ventas y Ganancias Mensuales
 
+-- ============================================================
+-- 1) Ventas y beneficio mensual
+-- ============================================================
+DROP MATERIALIZED VIEW IF EXISTS mv_sales_profit_monthly CASCADE;
 CREATE MATERIALIZED VIEW mv_sales_profit_monthly AS
-SELECT
-    sd.company_id,
-    DATE_TRUNC('month', sd.issue_date) AS sale_month,
-    EXTRACT(YEAR FROM DATE_TRUNC('month', sd.issue_date)) AS sale_year,
-    EXTRACT(MONTH FROM DATE_TRUNC('month', sd.issue_date)) AS sale_month_number,
-    TO_CHAR(DATE_TRUNC('month', sd.issue_date), 'Month') AS sale_month_name,
-    COUNT(DISTINCT sd.id) AS total_transactions,
-    COUNT(DISTINCT sd.customer_id) AS unique_customers,
-    SUM(sd.total) AS total_sales,
-    SUM(sd.total_local) AS total_sales_local,
-    SUM(sd.total_usd) AS total_sales_usd,
-    SUM(sd.total_clp) AS total_sales_clp,
-    SUM(sd.total_ope_gravadas) AS taxable_sales,
-    SUM(sd.total_ope_exoneradas) AS exempt_sales,
-    SUM(sd.total_ope_inafectas) AS non_taxable_sales,
-    SUM(sd.total_igv) AS total_tax,
-    SUM(sd.total_isc) AS total_excise_tax,
-    SUM(sd.total_descuentos) AS total_discounts,
-    SUM(sd.total_otros_cargos) AS total_other_charges,
-    -- Cálculo de ganancias mejorado
-    (SUM(sd.total) - COALESCE(SUM(sl.total_cost_out), 0)) AS estimated_profit,
-    (SUM(sd.total_local) - COALESCE(SUM(sl.total_cost_out_local), 0)) AS estimated_profit_local
-FROM sales_docs sd
-LEFT JOIN (
-    SELECT 
-        company_id,
-        DATE_TRUNC('month', movement_date) AS movement_month,
-        SUM(total_cost_out) AS total_cost_out,
-        SUM(total_cost_out_local) AS total_cost_out_local
-    FROM stock_ledger
-    WHERE operation_type = '01'
-    GROUP BY company_id, DATE_TRUNC('month', movement_date)
-) sl ON sd.company_id = sl.company_id 
-    AND DATE_TRUNC('month', sd.issue_date) = sl.movement_month
-WHERE sd.deleted_at IS NULL
-GROUP BY 
-    sd.company_id,
-    DATE_TRUNC('month', sd.issue_date);
-
--- Vista Materializada de Tendencia Mensual
-CREATE MATERIALIZED VIEW mv_sales_trend_monthly AS
-WITH monthly_sales AS (
-    SELECT
-        company_id,
-        DATE_TRUNC('month', issue_date) AS sale_month,
-        SUM(total) AS monthly_sales,
-        LAG(SUM(total), 1) OVER (
-            PARTITION BY company_id ORDER BY DATE_TRUNC('month', issue_date)
-        ) AS previous_month_sales,
-        LAG(SUM(total), 12) OVER (
-            PARTITION BY company_id ORDER BY DATE_TRUNC('month', issue_date)
-        ) AS previous_year_sales
-    FROM sales_docs
-    WHERE deleted_at IS NULL
-    GROUP BY company_id, DATE_TRUNC('month', issue_date)
-)
-SELECT
-    company_id,
-    sale_month,
-    EXTRACT(YEAR FROM sale_month) AS sale_year,
-    EXTRACT(MONTH FROM sale_month) AS sale_month_number,
-    monthly_sales,
-    previous_month_sales,
-    previous_year_sales,
-    CASE 
-        WHEN previous_month_sales > 0 
-        THEN ((monthly_sales - previous_month_sales) / previous_month_sales) * 100 
-        ELSE NULL 
-    END AS month_over_month_growth,
-    CASE 
-        WHEN previous_year_sales > 0 
-        THEN ((monthly_sales - previous_year_sales) / previous_year_sales) * 100 
-        ELSE NULL 
-    END AS year_over_year_growth
-FROM monthly_sales;
-
--- Vista Materializada de Ventas por Canal Mensual
-
-CREATE MATERIALIZED VIEW mv_sales_channel_monthly AS
-SELECT
+WITH sales_agg AS (
+  SELECT
     company_id,
     DATE_TRUNC('month', issue_date) AS sale_month,
-    doc_type,
-    COUNT(DISTINCT id) AS transaction_count,
+    EXTRACT(YEAR FROM DATE_TRUNC('month', issue_date)) AS sale_year,
+    EXTRACT(MONTH FROM DATE_TRUNC('month', issue_date)) AS sale_month_number,
+    TO_CHAR(DATE_TRUNC('month', issue_date), 'TMMonth') AS sale_month_name,
+    COUNT(DISTINCT id) AS total_transactions,
     COUNT(DISTINCT customer_id) AS unique_customers,
     SUM(total) AS total_sales,
     SUM(total_local) AS total_sales_local,
-    AVG(total) AS avg_transaction_value,
+    SUM(total_ope_gravadas) AS taxable_sales,
+    SUM(total_ope_exoneradas) AS exempt_sales,
+    SUM(total_ope_inafectas) AS non_taxable_sales,
     SUM(total_igv) AS total_tax
+  FROM sales_docs
+  WHERE deleted_at IS NULL
+  GROUP BY company_id, DATE_TRUNC('month', issue_date)
+),
+cost_agg AS (
+  SELECT 
+    company_id,
+    DATE_TRUNC('month', movement_date) AS movement_month,
+    SUM(total_cost_out) AS total_cost,
+    SUM(total_cost_out_local) AS total_cost_local
+  FROM stock_ledger
+  WHERE operation_type = '02' AND deleted_at IS NULL
+  GROUP BY company_id, DATE_TRUNC('month', movement_date)
+)
+SELECT
+  s.company_id,
+  s.sale_month,
+  s.sale_year,
+  s.sale_month_number,
+  s.sale_month_name,
+  s.total_transactions,
+  s.unique_customers,
+  s.total_sales,
+  s.total_sales_local,
+  s.taxable_sales,
+  s.exempt_sales,
+  s.non_taxable_sales,
+  s.total_tax,
+  COALESCE(c.total_cost, 0) AS total_cost,
+  COALESCE(c.total_cost_local, 0) AS total_cost_local,
+  (s.total_sales - COALESCE(c.total_cost, 0)) AS estimated_profit,
+  (s.total_sales_local - COALESCE(c.total_cost_local, 0)) AS estimated_profit_local
+FROM sales_agg s
+LEFT JOIN cost_agg c
+  ON s.company_id = c.company_id AND s.sale_month = c.movement_month;
+
+CREATE UNIQUE INDEX uq_mv_sales_profit_monthly_company_month
+  ON mv_sales_profit_monthly (company_id, sale_month);
+
+-- ============================================================
+-- 2) Tendencia de ventas mensual
+-- ============================================================
+DROP MATERIALIZED VIEW IF EXISTS mv_sales_trend_monthly CASCADE;
+CREATE MATERIALIZED VIEW mv_sales_trend_monthly AS
+WITH monthly_sales AS (
+  SELECT
+    company_id,
+    DATE_TRUNC('month', issue_date) AS sale_month,
+    SUM(total_local) AS monthly_sales
+  FROM sales_docs
+  WHERE deleted_at IS NULL
+  GROUP BY company_id, DATE_TRUNC('month', issue_date)
+),
+sales_with_lag AS (
+  SELECT
+    ms.company_id,
+    ms.sale_month,
+    ms.monthly_sales,
+    LAG(ms.monthly_sales) OVER (PARTITION BY ms.company_id ORDER BY ms.sale_month) AS previous_month_sales,
+    LAG(ms.monthly_sales, 12) OVER (PARTITION BY ms.company_id ORDER BY ms.sale_month) AS previous_year_sales
+  FROM monthly_sales ms
+)
+SELECT * FROM sales_with_lag;
+
+CREATE UNIQUE INDEX uq_mv_sales_trend_monthly_company_month
+  ON mv_sales_trend_monthly (company_id, sale_month);
+
+-- ============================================================
+-- 3) Ventas por canal (doc_type) mensual
+-- ============================================================
+DROP MATERIALIZED VIEW IF EXISTS mv_sales_channel_monthly CASCADE;
+CREATE MATERIALIZED VIEW mv_sales_channel_monthly AS
+SELECT
+  company_id,
+  DATE_TRUNC('month', issue_date) AS sale_month,
+  doc_type,
+  COUNT(DISTINCT id) AS transaction_count,
+  COUNT(DISTINCT customer_id) AS customer_count,
+  SUM(total_local) AS total_sales_local,
+  SUM(total_igv) AS total_tax_local
 FROM sales_docs
 WHERE deleted_at IS NULL
 GROUP BY company_id, DATE_TRUNC('month', issue_date), doc_type;
 
--- Vista Materializada de Métricas de Rentabilidad Mensual
+CREATE UNIQUE INDEX uq_mv_sales_channel_monthly_company_month_doctype
+  ON mv_sales_channel_monthly (company_id, sale_month, doc_type);
+
+-- ============================================================
+-- 4) Métricas de rentabilidad mensual
+-- ============================================================
+DROP MATERIALIZED VIEW IF EXISTS mv_profitability_metrics_monthly CASCADE;
 CREATE MATERIALIZED VIEW mv_profitability_metrics_monthly AS
+WITH sales_agg AS (
+  SELECT
+    company_id,
+    DATE_TRUNC('month', issue_date) AS sale_month,
+    SUM(total_local) AS total_sales_local
+  FROM sales_docs
+  WHERE deleted_at IS NULL
+  GROUP BY company_id, DATE_TRUNC('month', issue_date)
+),
+cost_agg AS (
+  SELECT 
+    company_id,
+    DATE_TRUNC('month', movement_date) AS movement_month,
+    SUM(total_cost_out_local) AS total_cost_out_local
+  FROM stock_ledger
+  WHERE operation_type = '02' AND deleted_at IS NULL
+  GROUP BY company_id, DATE_TRUNC('month', movement_date)
+)
 SELECT
-    sd.company_id,
-    DATE_TRUNC('month', sd.issue_date) AS sale_month,
-    EXTRACT(YEAR FROM sd.issue_date) AS sale_year,
-    EXTRACT(MONTH FROM sd.issue_date) AS sale_month_number,
-    
-    -- Ventas
-    SUM(sd.total) AS total_sales,
-    
-    -- Costo de ventas (estimado desde stock_ledger)
-    COALESCE(SUM(sl.total_cost_out), 0) AS cost_of_goods_sold,
-    
-    -- Margen bruto
-    SUM(sd.total) - COALESCE(SUM(sl.total_cost_out), 0) AS gross_profit,
-    
-    -- Margen bruto porcentual
-    CASE 
-        WHEN SUM(sd.total) > 0 
-        THEN ((SUM(sd.total) - COALESCE(SUM(sl.total_cost_out), 0)) / SUM(sd.total)) * 100 
-        ELSE 0 
-    END AS gross_margin_percentage,
-    
-    -- Impuestos
-    SUM(sd.total_igv) AS total_taxes,
-    
-    -- Descuentos
-    SUM(sd.total_descuentos) AS total_discounts,
-    
-    -- Otras métricas
-    COUNT(DISTINCT sd.id) AS transaction_count,
-    AVG(sd.total) AS avg_transaction_value
-FROM sales_docs sd
-LEFT JOIN (
-    SELECT 
-        company_id,
-        DATE_TRUNC('month', movement_date) AS movement_month,
-        SUM(total_cost_out) AS total_cost_out
-    FROM stock_ledger
-    WHERE operation_type = '01' -- Operaciones de venta
-    GROUP BY company_id, DATE_TRUNC('month', movement_date)
-) sl ON sd.company_id = sl.company_id AND DATE_TRUNC('month', sd.issue_date) = sl.movement_month
-WHERE sd.deleted_at IS NULL
-GROUP BY sd.company_id, DATE_TRUNC('month', sd.issue_date), 
-         EXTRACT(YEAR FROM sd.issue_date), EXTRACT(MONTH FROM sd.issue_date);
+  s.company_id,
+  s.sale_month,
+  s.total_sales_local,
+  COALESCE(c.total_cost_out_local, 0) AS cost_of_goods_sold_local,
+  (s.total_sales_local - COALESCE(c.total_cost_out_local, 0)) AS gross_profit_local,
+  CASE
+    WHEN s.total_sales_local = 0 THEN 0
+    ELSE ROUND(((s.total_sales_local - COALESCE(c.total_cost_out_local, 0)) / s.total_sales_local) * 100, 2)
+  END AS gross_margin_percentage_local
+FROM sales_agg s
+LEFT JOIN cost_agg c
+  ON s.company_id = c.company_id AND s.sale_month = c.movement_month;
+
+CREATE UNIQUE INDEX uq_mv_profitability_metrics_monthly_company_month
+  ON mv_profitability_metrics_monthly (company_id, sale_month);
 
 CREATE INDEX idx_mv_sales_profit_monthly ON mv_sales_profit_monthly (company_id, sale_month);
 CREATE INDEX idx_mv_sales_trend_monthly ON mv_sales_trend_monthly (company_id, sale_month);

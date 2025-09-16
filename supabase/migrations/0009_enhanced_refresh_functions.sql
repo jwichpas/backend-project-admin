@@ -225,7 +225,7 @@ ON mv_sales_profit_monthly (company_id, sale_month, sale_year);
 
 -- mv_sales_trend_monthly
 CREATE UNIQUE INDEX IF NOT EXISTS idx_mv_sales_trend_monthly_unique 
-ON mv_sales_trend_monthly (company_id, sale_month, sale_year);
+ON mv_sales_trend_monthly (company_id, sale_month);
 
 -- mv_sales_channel_monthly
 CREATE UNIQUE INDEX IF NOT EXISTS idx_mv_sales_channel_monthly_unique 
@@ -233,7 +233,7 @@ ON mv_sales_channel_monthly (company_id, sale_month, doc_type);
 
 -- mv_profitability_metrics_monthly
 CREATE UNIQUE INDEX IF NOT EXISTS idx_mv_profitability_metrics_monthly_unique 
-ON mv_profitability_metrics_monthly (company_id, sale_month, sale_year);
+ON mv_profitability_metrics_monthly (company_id, sale_month);
 
 -- Comentarios para documentación
 COMMENT ON FUNCTION refresh_all_sales_materialized_views() IS 
