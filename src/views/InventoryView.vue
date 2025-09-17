@@ -231,7 +231,8 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { useCompanyStore } from '@/stores/company'
+import { useCompaniesStore } from '@/stores/companies'
+import { useAuthStore } from '@/stores/auth'
 import { useProductsStore } from '@/stores/products'
 import { useInventoryCurrency } from '@/composables/useInventoryCurrency'
 import {
@@ -262,12 +263,13 @@ import TableCell from '@/components/ui/TableCell.vue'
 import Badge from '@/components/ui/Badge.vue'
 import CostDisplay from '@/components/inventory/CostDisplay.vue'
 
-const companyStore = useCompanyStore()
+const companiesStore = useCompaniesStore()
+const authStore = useAuthStore()
 const productsStore = useProductsStore()
 
 // Currency conversion
 const inventoryCurrency = useInventoryCurrency(productsStore.inventoryItems)
-const companyCurrency = computed(() => companyStore.selectedCompany?.currency_code || 'PEN')
+const companyCurrency = computed(() => companiesStore.currentCompany?.currency_code || 'PEN')
 
 // Filters
 const selectedWarehouse = ref('')
@@ -331,31 +333,40 @@ const formatCurrency = (amount: number, currencyCode: string = 'PEN') => {
   }
 }
 
+const refreshInventoryData = async () => {
+  if (companiesStore.currentCompany) {
+    console.log('Loading inventory for company:', companiesStore.currentCompany.legal_name)
+
+    await Promise.all([
+      productsStore.fetchInventoryItems(companiesStore.currentCompany.id),
+      productsStore.fetchWarehouses(companiesStore.currentCompany.id),
+      productsStore.fetchCategories(companiesStore.currentCompany.id)
+    ])
+
+    console.log('Inventory items loaded:', productsStore.inventoryItems.length)
+
+    // Convert inventory currencies after loading
+    await inventoryCurrency.convertAllItems(productsStore.inventoryItems)
+  }
+}
+
 onMounted(async () => {
   try {
+    console.log('InventoryView onMounted - currentCompany:', companiesStore.currentCompany)
+
     // Ensure companies are loaded
-    if (companyStore.companies.length === 0) {
-      await companyStore.fetchCompanies()
+    if (!companiesStore.currentCompany && companiesStore.userCompanies.length === 0 && authStore.user) {
+      await companiesStore.fetchUserCompanies(authStore.user.id)
     }
 
     // Auto-select first company if none selected
-    if (!companyStore.selectedCompany && companyStore.companies.length > 0) {
-      companyStore.selectCompany(companyStore.companies[0])
+    if (!companiesStore.currentCompany && companiesStore.userCompanies.length > 0) {
+      companiesStore.selectCompany(companiesStore.userCompanies[0].company)
     }
 
     // Load inventory data if company is available
-    if (companyStore.selectedCompany) {
-      console.log('Loading inventory for company:', companyStore.selectedCompany.legal_name)
-      
-      await Promise.all([
-        productsStore.fetchInventoryItems(companyStore.selectedCompany.id),
-        productsStore.fetchWarehouses(companyStore.selectedCompany.id),
-        productsStore.fetchCategories(companyStore.selectedCompany.id)
-      ])
-      
-      console.log('Inventory items loaded:', productsStore.inventoryItems.length)
-      
-      // Convert inventory currencies after loading
+    if (companiesStore.currentCompany) {
+      await refreshInventoryData()
       await inventoryCurrency.convertAllItems(productsStore.inventoryItems)
     } else {
       console.warn('No company available to load inventory')
@@ -364,6 +375,21 @@ onMounted(async () => {
     console.error('Error loading inventory data:', error)
   }
 })
+
+// Watch for company changes to reload inventory data
+watch(
+  () => companiesStore.currentCompany,
+  async (newCompany, oldCompany) => {
+    if (newCompany && oldCompany && newCompany.id !== oldCompany.id) {
+      console.log('Company changed in InventoryView, reloading data...', {
+        from: oldCompany.id,
+        to: newCompany.id
+      })
+      await refreshInventoryData()
+      await inventoryCurrency.convertAllItems(productsStore.inventoryItems)
+    }
+  }, { deep: true }
+)
 
 // Watch for changes in inventory items and reconvert
 watch(

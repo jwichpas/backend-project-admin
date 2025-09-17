@@ -162,9 +162,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useCompanyStore } from '@/stores/company'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useCompaniesStore } from '@/stores/companies'
 import { useProductsStore, type Brand } from '@/stores/products'
+import { useAuthStore } from '@/stores/auth'
 import { Plus, Award, Edit, Trash2 } from 'lucide-vue-next'
 
 // UI Components
@@ -179,8 +180,9 @@ import DialogHeader from '@/components/ui/DialogHeader.vue'
 import DialogTitle from '@/components/ui/DialogTitle.vue'
 import DialogFooter from '@/components/ui/DialogFooter.vue'
 
-const companyStore = useCompanyStore()
+const companiesStore = useCompaniesStore()
 const productsStore = useProductsStore()
+const authStore = useAuthStore()
 
 // State
 const searchTerm = ref('')
@@ -245,11 +247,11 @@ const deleteBrand = async (brand: Brand) => {
 
 const submitForm = async () => {
   try {
-    if (!companyStore.selectedCompany) return
+    if (!companiesStore.currentCompany) return
 
     const brandData = {
       ...brandForm.value,
-      company_id: companyStore.selectedCompany.id
+      company_id: companiesStore.currentCompany.id
     }
 
     if (editingBrand.value) {
@@ -275,12 +277,42 @@ const cancelForm = () => {
   }
 }
 
-onMounted(async () => {
-  if (companyStore.selectedCompany) {
+const refreshData = async () => {
+  if (companiesStore.currentCompany) {
     await Promise.all([
-      productsStore.fetchBrands(companyStore.selectedCompany.id),
-      productsStore.fetchProducts(companyStore.selectedCompany.id)
+      productsStore.fetchBrands(companiesStore.currentCompany.id),
+      productsStore.fetchProducts(companiesStore.currentCompany.id)
     ])
   }
+}
+
+onMounted(async () => {
+  console.log('BrandsView onMounted - currentCompany:', companiesStore.currentCompany)
+
+  if (!companiesStore.currentCompany && companiesStore.userCompanies.length === 0 && authStore.user) {
+    await companiesStore.fetchUserCompanies(authStore.user.id)
+  }
+
+  if (!companiesStore.currentCompany && companiesStore.userCompanies.length > 0) {
+    companiesStore.selectCompany(companiesStore.userCompanies[0].company)
+  }
+
+  if (companiesStore.currentCompany) {
+    await refreshData()
+  }
 })
+
+// Watch for company changes
+watch(
+  () => companiesStore.currentCompany,
+  async (newCompany, oldCompany) => {
+    if (newCompany && oldCompany && newCompany.id !== oldCompany.id) {
+      console.log('Company changed in BrandsView, reloading data...', {
+        from: oldCompany.id,
+        to: newCompany.id
+      })
+      await refreshData()
+    }
+  }, { deep: true }
+)
 </script>

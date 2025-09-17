@@ -332,8 +332,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useCompanyStore } from '@/stores/company'
+import { ref, onMounted, watch } from 'vue'
+import { useCompaniesStore } from '@/stores/companies'
+import { useAuthStore } from '@/stores/auth'
 import { useWarehouseManager, type Warehouse, type WarehouseZone, type WarehouseAisle, type WarehouseShelf, type WarehouseShelfPosition } from '@/composables/useWarehouseManager'
 import { Plus, Warehouse as WarehouseIcon, Layers, Navigation, Boxes, MapPin } from 'lucide-vue-next'
 
@@ -354,7 +355,8 @@ import WarehouseAisleFormModal from '@/components/warehouse/management/Warehouse
 import WarehouseShelfFormModal from '@/components/warehouse/management/WarehouseShelfFormModal.vue'
 import WarehouseShelfPositionFormModal from '@/components/warehouse/management/WarehouseShelfPositionFormModal.vue'
 
-const companyStore = useCompanyStore()
+const companiesStore = useCompaniesStore()
+const authStore = useAuthStore()
 const warehouseManager = useWarehouseManager()
 
 // State
@@ -522,7 +524,7 @@ const handleSaveWarehouse = async (warehouse: Partial<Warehouse>) => {
     } else {
       await warehouseManager.createWarehouse({
         ...warehouse,
-        company_id: companyStore.selectedCompany!.id
+        company_id: companiesStore.currentCompany!.id
       } as Omit<Warehouse, 'id' | 'created_at' | 'updated_at'>)
     }
     showCreateWarehouse.value = false
@@ -539,7 +541,7 @@ const handleSaveZone = async (zone: Partial<WarehouseZone>) => {
     } else {
       await warehouseManager.createZone({
         ...zone,
-        company_id: companyStore.selectedCompany!.id
+        company_id: companiesStore.currentCompany!.id
       } as Omit<WarehouseZone, 'id' | 'created_at' | 'updated_at'>)
     }
     showCreateZone.value = false
@@ -588,9 +590,39 @@ const handleSavePosition = async (position: Partial<WarehouseShelfPosition>) => 
   }
 }
 
+const refreshWarehouseData = async () => {
+  if (companiesStore.currentCompany) {
+    await warehouseManager.initializeWarehouseData(companiesStore.currentCompany.id)
+  }
+}
+
 onMounted(async () => {
-  if (companyStore.selectedCompany) {
-    await warehouseManager.initializeWarehouseData(companyStore.selectedCompany.id)
+  console.log('WarehouseManagementView onMounted - currentCompany:', companiesStore.currentCompany)
+
+  if (!companiesStore.currentCompany && companiesStore.userCompanies.length === 0 && authStore.user) {
+    await companiesStore.fetchUserCompanies(authStore.user.id)
+  }
+
+  if (!companiesStore.currentCompany && companiesStore.userCompanies.length > 0) {
+    companiesStore.selectCompany(companiesStore.userCompanies[0].company)
+  }
+
+  if (companiesStore.currentCompany) {
+    await refreshWarehouseData()
   }
 })
+
+// Watch for company changes
+watch(
+  () => companiesStore.currentCompany,
+  async (newCompany, oldCompany) => {
+    if (newCompany && oldCompany && newCompany.id !== oldCompany.id) {
+      console.log('Company changed in WarehouseManagementView, reloading data...', {
+        from: oldCompany.id,
+        to: newCompany.id
+      })
+      await refreshWarehouseData()
+    }
+  }, { deep: true }
+)
 </script>

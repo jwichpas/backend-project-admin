@@ -239,8 +239,9 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { useCompanyStore } from '@/stores/company'
+import { useCompaniesStore } from '@/stores/companies'
 import { usePurchasesStore, type PurchaseOrder } from '@/stores/purchases'
+import { useAuthStore } from '@/stores/auth'
 import {
   Download,
   Plus,
@@ -281,8 +282,9 @@ import DialogTitle from '@/components/ui/DialogTitle.vue'
 import PurchaseOrderForm from '@/components/purchases/PurchaseOrderForm.vue'
 import PurchaseOrderDetails from '@/components/purchases/PurchaseOrderDetails.vue'
 
-const companyStore = useCompanyStore()
+const companiesStore = useCompaniesStore()
 const purchasesStore = usePurchasesStore()
+const authStore = useAuthStore()
 
 // State
 const searchTerm = ref('')
@@ -508,39 +510,43 @@ const exportOrders = () => {
 }
 
 const refreshData = async () => {
-  if (companyStore.selectedCompany) {
+  if (companiesStore.currentCompany) {
     await Promise.all([
-      purchasesStore.fetchPurchaseOrders(companyStore.selectedCompany.id),
-      purchasesStore.fetchSuppliers(companyStore.selectedCompany.id)
+      purchasesStore.fetchPurchaseOrders(companiesStore.currentCompany.id),
+      purchasesStore.fetchSuppliers(companiesStore.currentCompany.id)
     ])
   }
 }
 
 // Lifecycle
 onMounted(async () => {
-  console.log('PurchaseOrdersView onMounted - selectedCompany:', companyStore.selectedCompany)
-  
+  console.log('PurchaseOrdersView onMounted - currentCompany:', companiesStore.currentCompany)
+
   // If no company is selected but companies exist, select the first one
-  if (!companyStore.selectedCompany && companyStore.companies.length === 0) {
-    await companyStore.fetchCompanies()
+  if (!companiesStore.currentCompany && companiesStore.userCompanies.length === 0 && authStore.user) {
+    await companiesStore.fetchUserCompanies(authStore.user.id)
   }
-  
-  if (!companyStore.selectedCompany && companyStore.companies.length > 0) {
-    companyStore.selectCompany(companyStore.companies[0])
+
+  if (!companiesStore.currentCompany && companiesStore.userCompanies.length > 0) {
+    companiesStore.selectCompany(companiesStore.userCompanies[0].company)
   }
-  
-  if (companyStore.selectedCompany) {
+
+  if (companiesStore.currentCompany) {
     await refreshData()
   }
 })
 
 // Watchers
 watch(
-  () => companyStore.selectedCompany,
-  async (newCompany) => {
-    if (newCompany) {
+  () => companiesStore.currentCompany,
+  async (newCompany, oldCompany) => {
+    if (newCompany && oldCompany && newCompany.id !== oldCompany.id) {
+      console.log('Company changed in PurchaseOrdersView, reloading data...', {
+        from: oldCompany.id,
+        to: newCompany.id
+      })
       await refreshData()
     }
-  }
+  }, { deep: true }
 )
 </script>

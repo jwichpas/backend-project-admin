@@ -277,9 +277,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { useCompanyStore } from '@/stores/company'
+import { useCompaniesStore } from '@/stores/companies'
 import { usePurchasesStore, type PurchaseOrder } from '@/stores/purchases'
 import { useProductsStore } from '@/stores/products'
+import { useAuthStore } from '@/stores/auth'
 import {
   Download,
   Plus,
@@ -303,9 +304,10 @@ import CardContent from '@/components/ui/CardContent.vue'
 import Badge from '@/components/ui/Badge.vue'
 
 const router = useRouter()
-const companyStore = useCompanyStore()
+const companiesStore = useCompaniesStore()
 const purchasesStore = usePurchasesStore()
 const productsStore = useProductsStore()
+const authStore = useAuthStore()
 
 // State
 const showQuickActions = ref(false)
@@ -512,34 +514,34 @@ const exportData = () => {
 }
 
 const refreshData = async () => {
-  if (companyStore.selectedCompany) {
+  if (companiesStore.currentCompany) {
     await Promise.all([
-      purchasesStore.fetchPurchaseOrders(companyStore.selectedCompany.id),
-      purchasesStore.fetchPurchaseDocs(companyStore.selectedCompany.id),
-      purchasesStore.fetchReceptions(companyStore.selectedCompany.id),
-      purchasesStore.fetchSuppliers(companyStore.selectedCompany.id)
+      purchasesStore.fetchPurchaseOrders(companiesStore.currentCompany.id),
+      purchasesStore.fetchPurchaseDocs(companiesStore.currentCompany.id),
+      purchasesStore.fetchReceptions(companiesStore.currentCompany.id),
+      purchasesStore.fetchSuppliers(companiesStore.currentCompany.id)
     ])
   }
 }
 
 // Lifecycle
 onMounted(async () => {
-  console.log('PurchasesView onMounted - selectedCompany:', companyStore.selectedCompany)
-  console.log('Companies available:', companyStore.companies)
-  
+  console.log('PurchasesView onMounted - currentCompany:', companiesStore.currentCompany)
+  console.log('Companies available:', companiesStore.companies)
+
   // If no company is selected but companies exist, select the first one
-  if (!companyStore.selectedCompany && companyStore.companies.length === 0) {
+  if (!companiesStore.currentCompany && companiesStore.userCompanies.length === 0 && authStore.user) {
     console.log('No companies loaded, fetching companies...')
-    await companyStore.fetchCompanies()
+    await companiesStore.fetchUserCompanies(authStore.user.id)
   }
-  
-  if (!companyStore.selectedCompany && companyStore.companies.length > 0) {
-    console.log('Auto-selecting first company:', companyStore.companies[0])
-    companyStore.selectCompany(companyStore.companies[0])
+
+  if (!companiesStore.currentCompany && companiesStore.userCompanies.length > 0) {
+    console.log('Auto-selecting first company:', companiesStore.userCompanies[0].company)
+    companiesStore.selectCompany(companiesStore.userCompanies[0].company)
   }
-  
-  if (companyStore.selectedCompany) {
-    console.log('Fetching purchase data for company:', companyStore.selectedCompany.id)
+
+  if (companiesStore.currentCompany) {
+    console.log('Fetching purchase data for company:', companiesStore.currentCompany.id)
     await refreshData()
   } else {
     console.warn('No company available to fetch purchase data')
@@ -548,11 +550,15 @@ onMounted(async () => {
 
 // Watchers
 watch(
-  () => companyStore.selectedCompany,
-  async (newCompany) => {
-    if (newCompany) {
+  () => companiesStore.currentCompany,
+  async (newCompany, oldCompany) => {
+    if (newCompany && oldCompany && newCompany.id !== oldCompany.id) {
+      console.log('Company changed in PurchasesView, reloading data...', {
+        from: oldCompany.id,
+        to: newCompany.id
+      })
       await refreshData()
     }
-  }
+  }, { deep: true }
 )
 </script>

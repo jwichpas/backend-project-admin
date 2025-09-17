@@ -274,9 +274,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useCompanyStore } from '@/stores/company'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useCompaniesStore } from '@/stores/companies'
 import { useProductsStore, type PriceList, type PriceListItem } from '@/stores/products'
+import { useAuthStore } from '@/stores/auth'
 import { supabase } from '@/lib/supabase'
 import { sunatCurrenciesService, type SunatCatalogItem } from '@/services/sunatService'
 import { Plus, DollarSign, Eye, Edit, Trash2 } from 'lucide-vue-next'
@@ -301,8 +302,9 @@ import TableHead from '@/components/ui/TableHead.vue'
 import TableBody from '@/components/ui/TableBody.vue'
 import TableCell from '@/components/ui/TableCell.vue'
 
-const companyStore = useCompanyStore()
+const companiesStore = useCompaniesStore()
 const productsStore = useProductsStore()
+const authStore = useAuthStore()
 
 // State
 const showCreateDialog = ref(false)
@@ -412,7 +414,7 @@ const viewPriceListItems = async (priceList: PriceList) => {
   selectedPriceList.value = priceList
   
   // Load price list items for this specific price list
-  await productsStore.fetchPriceListItems(companyStore.selectedCompany?.id || '', priceList.id)
+  await productsStore.fetchPriceListItems(companiesStore.currentCompany?.id || '', priceList.id)
   priceListItems.value = productsStore.priceListItems.filter(item => item.price_list_id === priceList.id)
   
   showItemsDialog.value = true
@@ -420,11 +422,11 @@ const viewPriceListItems = async (priceList: PriceList) => {
 
 const submitPriceListForm = async () => {
   try {
-    if (!companyStore.selectedCompany) return
+    if (!companiesStore.currentCompany) return
 
     const priceListData = {
       ...priceListForm.value,
-      company_id: companyStore.selectedCompany.id
+      company_id: companiesStore.currentCompany.id
     }
 
     if (editingPriceList.value) {
@@ -458,7 +460,7 @@ const addPriceListItem = async () => {
     const { data, error } = await supabase
       .from('price_list_items')
       .insert({
-        company_id: companyStore.selectedCompany?.id || '',
+        company_id: companiesStore.currentCompany?.id || '',
         price_list_id: selectedPriceList.value.id,
         product_id: itemForm.value.product_id,
         unit_price: parseFloat(itemForm.value.unit_price),
@@ -470,7 +472,7 @@ const addPriceListItem = async () => {
     if (error) throw error
 
     // Reload price list items
-    await productsStore.fetchPriceListItems(companyStore.selectedCompany?.id || '', selectedPriceList.value.id)
+    await productsStore.fetchPriceListItems(companiesStore.currentCompany?.id || '', selectedPriceList.value.id)
     priceListItems.value = productsStore.priceListItems.filter(item => item.price_list_id === selectedPriceList.value?.id)
     
     // Reset form
@@ -503,16 +505,46 @@ const removePriceListItem = async (item: PriceListItem) => {
   }
 }
 
+const refreshData = async () => {
+  if (companiesStore.currentCompany) {
+    await Promise.all([
+      productsStore.fetchPriceLists(companiesStore.currentCompany.id),
+      productsStore.fetchProducts(companiesStore.currentCompany.id),
+      productsStore.fetchPriceListItems(companiesStore.currentCompany.id)
+    ])
+  }
+}
+
 onMounted(async () => {
   // Load currencies first
   await loadCurrencies()
-  
-  if (companyStore.selectedCompany) {
-    await Promise.all([
-      productsStore.fetchPriceLists(companyStore.selectedCompany.id),
-      productsStore.fetchProducts(companyStore.selectedCompany.id),
-      productsStore.fetchPriceListItems(companyStore.selectedCompany.id)
-    ])
+
+  console.log('PriceListsView onMounted - currentCompany:', companiesStore.currentCompany)
+
+  if (!companiesStore.currentCompany && companiesStore.userCompanies.length === 0 && authStore.user) {
+    await companiesStore.fetchUserCompanies(authStore.user.id)
+  }
+
+  if (!companiesStore.currentCompany && companiesStore.userCompanies.length > 0) {
+    companiesStore.selectCompany(companiesStore.userCompanies[0].company)
+  }
+
+  if (companiesStore.currentCompany) {
+    await refreshData()
   }
 })
+
+// Watch for company changes
+watch(
+  () => companiesStore.currentCompany,
+  async (newCompany, oldCompany) => {
+    if (newCompany && oldCompany && newCompany.id !== oldCompany.id) {
+      console.log('Company changed in PriceListsView, reloading data...', {
+        from: oldCompany.id,
+        to: newCompany.id
+      })
+      await refreshData()
+    }
+  }, { deep: true }
+)
 </script>

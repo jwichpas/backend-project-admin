@@ -363,8 +363,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useCompanyStore } from '@/stores/company'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useCompaniesStore } from '@/stores/companies'
+import { useAuthStore } from '@/stores/auth'
 import { useWarehouseVisualizer } from '@/composables/useWarehouseVisualizer'
 import { useWarehouseManager } from '@/composables/useWarehouseManager'
 import {
@@ -393,7 +394,8 @@ import Warehouse2DView from '@/components/warehouse/Warehouse2DView.vue'
 import Warehouse3DView from '@/components/warehouse/Warehouse3DView.vue'
 import HierarchicalLocationSelector from '@/components/warehouse/HierarchicalLocationSelector.vue'
 
-const companyStore = useCompanyStore()
+const companiesStore = useCompaniesStore()
+const authStore = useAuthStore()
 const visualizer = useWarehouseVisualizer()
 const warehouseManager = useWarehouseManager()
 
@@ -462,10 +464,10 @@ const onSearchChange = () => {
 }
 
 const refreshData = async () => {
-  if (companyStore.selectedCompany) {
+  if (companiesStore.currentCompany) {
     await Promise.all([
-      visualizer.initializeData(companyStore.selectedCompany.id),
-      warehouseManager.initializeWarehouseData(companyStore.selectedCompany.id)
+      visualizer.initializeData(companiesStore.currentCompany.id),
+      warehouseManager.initializeWarehouseData(companiesStore.currentCompany.id)
     ])
   }
 }
@@ -492,11 +494,32 @@ const applyHierarchicalSelection = () => {
 
 // Initialize data
 onMounted(async () => {
-  if (companyStore.selectedCompany) {
-    await Promise.all([
-      visualizer.initializeData(companyStore.selectedCompany.id),
-      warehouseManager.initializeWarehouseData(companyStore.selectedCompany.id)
-    ])
+  console.log('WarehouseVisualizerView onMounted - currentCompany:', companiesStore.currentCompany)
+
+  if (!companiesStore.currentCompany && companiesStore.userCompanies.length === 0 && authStore.user) {
+    await companiesStore.fetchUserCompanies(authStore.user.id)
+  }
+
+  if (!companiesStore.currentCompany && companiesStore.userCompanies.length > 0) {
+    companiesStore.selectCompany(companiesStore.userCompanies[0].company)
+  }
+
+  if (companiesStore.currentCompany) {
+    await refreshData()
   }
 })
+
+// Watch for company changes
+watch(
+  () => companiesStore.currentCompany,
+  async (newCompany, oldCompany) => {
+    if (newCompany && oldCompany && newCompany.id !== oldCompany.id) {
+      console.log('Company changed in WarehouseVisualizerView, reloading data...', {
+        from: oldCompany.id,
+        to: newCompany.id
+      })
+      await refreshData()
+    }
+  }, { deep: true }
+)
 </script>

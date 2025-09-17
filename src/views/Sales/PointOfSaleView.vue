@@ -2133,6 +2133,13 @@ const fetchWarehouses = async () => {
 
     if (error) throw error
     availableWarehouses.value = data || []
+
+    // Auto-select first warehouse if none is selected and warehouses are available
+    if (availableWarehouses.value.length > 0 && !posSettings.value.defaultWarehouseId) {
+      posSettings.value.defaultWarehouseId = availableWarehouses.value[0].id
+      saveSettingsToStorage()
+      console.log('Auto-selected first warehouse:', availableWarehouses.value[0].name)
+    }
   } catch (error) {
     console.error('Error fetching warehouses:', error)
   }
@@ -2188,6 +2195,37 @@ onMounted(async () => {
     saveSettingsToStorage()
   }
 })
+
+// Watch for company changes to reload products
+watch(() => companiesStore.currentCompany, async (newCompany, oldCompany) => {
+  if (newCompany && oldCompany && newCompany.id !== oldCompany.id) {
+    console.log('Company changed in POS, reloading products...', {
+      from: oldCompany.id,
+      to: newCompany.id
+    })
+
+    // Reload all company-specific data
+    await Promise.all([
+      // Reload price lists for new company
+      salesStore.fetchPriceLists(newCompany.id),
+      // Reload customers for new company
+      salesStore.fetchCustomers(newCompany.id),
+      // Reload available series for new company
+      fetchAvailableSeries(newCompany.id),
+      // Reload warehouses for new company
+      fetchWarehouses()
+    ])
+
+    // Then reload products with selected price list
+    await salesStore.fetchProducts(newCompany.id, salesStore.selectedPriceList?.id)
+
+    // Clear current cart as products are from different company
+    cartItems.value = []
+    selectedCustomer.value = null
+
+    console.log('POS data reloaded for new company')
+  }
+}, { deep: true })
 </script>
 
 <style scoped>

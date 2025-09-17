@@ -900,8 +900,9 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { useCompanyStore } from '@/stores/company'
+import { useCompaniesStore } from '@/stores/companies'
 import { useProductsStore, type ProductFull } from '@/stores/products'
+import { useAuthStore } from '@/stores/auth'
 import { sunatMeasurementUnitsService, type SunatCatalogItem } from '@/services/sunatService'
 import {
   Download,
@@ -937,8 +938,9 @@ import DialogTitle from '@/components/ui/DialogTitle.vue'
 import DialogFooter from '@/components/ui/DialogFooter.vue'
 import PriceDisplay from '@/components/Products/PriceDisplay.vue'
 
-const companyStore = useCompanyStore()
+const companiesStore = useCompaniesStore()
 const productsStore = useProductsStore()
+const authStore = useAuthStore()
 
 // State
 const showCreateProductDialog = ref(false)
@@ -1117,10 +1119,10 @@ const formatCurrency = (amount: number, currencyCode: string) => {
 
 // Load products with current filters
 const loadProducts = async () => {
-  if (!companyStore.selectedCompany) return
+  if (!companiesStore.currentCompany) return
 
   await productsStore.fetchProductsFull(
-    companyStore.selectedCompany.id,
+    companiesStore.currentCompany.id,
     selectedPriceList.value || null,
     selectedCategory.value || null,
     selectedBrand.value || null
@@ -1138,11 +1140,11 @@ const loadMeasurementUnits = async () => {
 
 const submitProductForm = async () => {
   try {
-    if (!companyStore.selectedCompany) return
+    if (!companiesStore.currentCompany) return
 
     const productData = {
       ...productForm.value,
-      company_id: companyStore.selectedCompany.id
+      company_id: companiesStore.currentCompany.id
     }
 
     if (editingProduct.value && selectedProduct.value) {
@@ -1278,25 +1280,25 @@ const resetAdvancedFilters = () => {
 onMounted(async () => {
   try {
     // Ensure companies are loaded
-    if (companyStore.companies.length === 0) {
-      await companyStore.fetchCompanies()
+    if (companiesStore.userCompanies.length === 0 && authStore.user) {
+      await companiesStore.fetchUserCompanies(authStore.user.id)
     }
 
     // Auto-select first company if none selected
-    if (!companyStore.selectedCompany && companyStore.companies.length > 0) {
-      companyStore.selectCompany(companyStore.companies[0])
+    if (!companiesStore.currentCompany && companiesStore.userCompanies.length > 0) {
+      companiesStore.selectCompany(companiesStore.userCompanies[0].company)
     }
 
     // Load products data if company is available
-    if (companyStore.selectedCompany) {
-      console.log('Loading products for company:', companyStore.selectedCompany.legal_name)
+    if (companiesStore.currentCompany) {
+      console.log('Loading products for company:', companiesStore.currentCompany.legal_name)
 
       await Promise.all([
-        productsStore.fetchBrands(companyStore.selectedCompany.id),
-        productsStore.fetchCategories(companyStore.selectedCompany.id),
-        productsStore.fetchWarehouses(companyStore.selectedCompany.id),
-        productsStore.fetchPriceLists(companyStore.selectedCompany.id),
-        productsStore.fetchInventoryItems(companyStore.selectedCompany.id),
+        productsStore.fetchBrands(companiesStore.currentCompany.id),
+        productsStore.fetchCategories(companiesStore.currentCompany.id),
+        productsStore.fetchWarehouses(companiesStore.currentCompany.id),
+        productsStore.fetchPriceLists(companiesStore.currentCompany.id),
+        productsStore.fetchInventoryItems(companiesStore.currentCompany.id),
         loadMeasurementUnits()
       ])
 
@@ -1322,5 +1324,33 @@ onMounted(async () => {
 // Watch for filter changes to reload products
 watch([selectedCategory, selectedBrand, selectedPriceList], async () => {
   await loadProducts()
+}, { deep: true })
+
+// Watch for company changes to reload all data
+watch(() => companiesStore.currentCompany, async (newCompany, oldCompany) => {
+  if (newCompany && oldCompany && newCompany.id !== oldCompany.id) {
+    console.log('Company changed in Products view, reloading data...', {
+      from: oldCompany.id,
+      to: newCompany.id
+    })
+
+    // Reset filters
+    selectedCategory.value = ''
+    selectedBrand.value = ''
+    selectedPriceList.value = ''
+
+    // Reload all company-specific data
+    await Promise.all([
+      productsStore.fetchBrands(newCompany.id),
+      productsStore.fetchCategories(newCompany.id),
+      productsStore.fetchWarehouses(newCompany.id),
+      productsStore.fetchPriceLists(newCompany.id),
+    ])
+
+    // Load products for new company
+    await loadProducts()
+
+    console.log('Products view data reloaded for new company')
+  }
 }, { deep: true })
 </script>

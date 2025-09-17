@@ -106,9 +106,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useCompanyStore } from '@/stores/company'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useCompaniesStore } from '@/stores/companies'
 import { useProductsStore, type Category } from '@/stores/products'
+import { useAuthStore } from '@/stores/auth'
 import { Plus } from 'lucide-vue-next'
 
 // UI Components
@@ -125,8 +126,9 @@ import DialogTitle from '@/components/ui/DialogTitle.vue'
 import DialogFooter from '@/components/ui/DialogFooter.vue'
 import CategoryTree from '@/components/Products/CategoryTree.vue'
 
-const companyStore = useCompanyStore()
+const companiesStore = useCompaniesStore()
 const productsStore = useProductsStore()
+const authStore = useAuthStore()
 
 // Form state
 const showCreateDialog = ref(false)
@@ -183,11 +185,11 @@ const deleteCategory = async (category: Category) => {
 
 const submitForm = async () => {
   try {
-    if (!companyStore.selectedCompany) return
+    if (!companiesStore.currentCompany) return
 
     const categoryData = {
       ...categoryForm.value,
-      company_id: companyStore.selectedCompany.id,
+      company_id: companiesStore.currentCompany.id,
       level: categoryForm.value.parent_id ? 
         (productsStore.categories.find(c => c.id === categoryForm.value.parent_id)?.level || 0) + 1 : 
         1,
@@ -218,9 +220,39 @@ const cancelForm = () => {
   }
 }
 
+const refreshData = async () => {
+  if (companiesStore.currentCompany) {
+    await productsStore.fetchCategories(companiesStore.currentCompany.id)
+  }
+}
+
 onMounted(async () => {
-  if (companyStore.selectedCompany) {
-    await productsStore.fetchCategories(companyStore.selectedCompany.id)
+  console.log('CategoriesView onMounted - currentCompany:', companiesStore.currentCompany)
+
+  if (!companiesStore.currentCompany && companiesStore.userCompanies.length === 0 && authStore.user) {
+    await companiesStore.fetchUserCompanies(authStore.user.id)
+  }
+
+  if (!companiesStore.currentCompany && companiesStore.userCompanies.length > 0) {
+    companiesStore.selectCompany(companiesStore.userCompanies[0].company)
+  }
+
+  if (companiesStore.currentCompany) {
+    await refreshData()
   }
 })
+
+// Watch for company changes
+watch(
+  () => companiesStore.currentCompany,
+  async (newCompany, oldCompany) => {
+    if (newCompany && oldCompany && newCompany.id !== oldCompany.id) {
+      console.log('Company changed in CategoriesView, reloading data...', {
+        from: oldCompany.id,
+        to: newCompany.id
+      })
+      await refreshData()
+    }
+  }, { deep: true }
+)
 </script>

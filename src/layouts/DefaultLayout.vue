@@ -609,7 +609,6 @@ const refreshProductsForCompany = async () => {
     try {
       // Clear current products and fetch for new company
       productsStore.products = []
-      productsStore.activeProducts = []
       await productsStore.fetchProducts(selectedCompanyId.value)
     } catch (error) {
       console.error('Error refreshing products for company:', error)

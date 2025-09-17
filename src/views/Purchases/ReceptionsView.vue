@@ -268,9 +268,10 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { useCompanyStore } from '@/stores/company'
+import { useCompaniesStore } from '@/stores/companies'
 import { usePurchasesStore, type Reception } from '@/stores/purchases'
 import { useProductsStore } from '@/stores/products'
+import { useAuthStore } from '@/stores/auth'
 import {
   Download,
   Plus,
@@ -311,9 +312,10 @@ import DialogTitle from '@/components/ui/DialogTitle.vue'
 import ReceptionForm from '@/components/purchases/ReceptionForm.vue'
 import ReceptionDetails from '@/components/purchases/ReceptionDetails.vue'
 
-const companyStore = useCompanyStore()
+const companiesStore = useCompaniesStore()
 const purchasesStore = usePurchasesStore()
 const productsStore = useProductsStore()
+const authStore = useAuthStore()
 
 // State
 const searchTerm = ref('')
@@ -468,28 +470,43 @@ const exportReceptions = () => {
 }
 
 const refreshData = async () => {
-  if (companyStore.selectedCompany) {
+  if (companiesStore.currentCompany) {
     await Promise.all([
-      purchasesStore.fetchReceptions(companyStore.selectedCompany.id),
-      productsStore.fetchWarehouses(companyStore.selectedCompany.id)
+      purchasesStore.fetchReceptions(companiesStore.currentCompany.id),
+      productsStore.fetchWarehouses(companiesStore.currentCompany.id)
     ])
   }
 }
 
 // Lifecycle
 onMounted(async () => {
-  if (companyStore.selectedCompany) {
+  console.log('ReceptionsView onMounted - currentCompany:', companiesStore.currentCompany)
+
+  // If no company is selected but companies exist, select the first one
+  if (!companiesStore.currentCompany && companiesStore.userCompanies.length === 0 && authStore.user) {
+    await companiesStore.fetchUserCompanies(authStore.user.id)
+  }
+
+  if (!companiesStore.currentCompany && companiesStore.userCompanies.length > 0) {
+    companiesStore.selectCompany(companiesStore.userCompanies[0].company)
+  }
+
+  if (companiesStore.currentCompany) {
     await refreshData()
   }
 })
 
 // Watchers
 watch(
-  () => companyStore.selectedCompany,
-  async (newCompany) => {
-    if (newCompany) {
+  () => companiesStore.currentCompany,
+  async (newCompany, oldCompany) => {
+    if (newCompany && oldCompany && newCompany.id !== oldCompany.id) {
+      console.log('Company changed in ReceptionsView, reloading data...', {
+        from: oldCompany.id,
+        to: newCompany.id
+      })
       await refreshData()
     }
-  }
+  }, { deep: true }
 )
 </script>
