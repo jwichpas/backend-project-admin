@@ -282,6 +282,14 @@ const subtotal = computed(() => {
   return items.value.reduce((total, item) => total + item.total_line, 0)
 })
 
+const totalAmount = computed(() => {
+  return items.value.reduce((total, item) => total + item.total_line, 0)
+})
+
+const totalQuantity = computed(() => {
+  return items.value.reduce((total, item) => total + item.quantity, 0)
+})
+
 const canEdit = computed(() => {
   return props.order.status === 'PENDING'
 })
@@ -321,6 +329,10 @@ const formatCurrency = (amount: number, currencyCode: string) => {
   } else {
     return `${currencyCode} ${amount.toLocaleString('es-PE', { minimumFractionDigits: 2 })}`
   }
+}
+
+const formatNumber = (number: number) => {
+  return number.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 6 })
 }
 
 const getStatusVariant = (status: string): 'default' | 'secondary' | 'destructive' | 'outline' | 'success' | 'warning' => {

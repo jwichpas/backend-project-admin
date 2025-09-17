@@ -372,140 +372,205 @@ const generateDocumentPDFContent = (): string => {
         <title>Documento de Compra - ${props.doc.series}-${props.doc.number}</title>
         <style>
           body {
-            font-family: 'Segoe UI', Arial, sans-serif;
-            margin: 40px;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
             color: #333;
-            background: #fafafa;
+            font-size: 12px;
           }
 
           .header {
             text-align: center;
-            margin-bottom: 40px;
-          }
-
-          .header h1 {
-            margin: 0;
-            font-size: 28px;
-            color: #111;
-            letter-spacing: 1px;
-          }
-
-          .header h2 {
-            margin: 5px 0 0;
-            font-size: 16px;
-            color: #555;
-            font-weight: normal;
-          }
-
-          .info-section {
             margin-bottom: 30px;
-            padding: 20px;
-            background: #fff;
-            border: 1px solid #ddd;
-            border-radius: 8px;
+            border-bottom: 2px solid #dc2626;
+            padding-bottom: 20px;
           }
-
-          .info-row {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 10px;
+          .header h1 {
+            color: #dc2626;
+            margin: 0;
+            font-size: 24px;
+            font-weight: bold;
+          }
+          .header p {
+            margin: 5px 0;
+            color: #666;
             font-size: 14px;
           }
 
-          .info-row strong {
-            color: #444;
+          .info-section {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 25px;
+            gap: 20px;
+          }
+          .info-box {
+            flex: 1;
+            background: #f8fafc;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+          }
+          .info-box h3 {
+            margin: 0 0 10px 0;
+            color: #dc2626;
+            font-size: 14px;
+            font-weight: bold;
+          }
+          .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+          }
+          .info-label {
+            font-weight: bold;
+            color: #374151;
+          }
+          .info-value {
+            color: #6b7280;
           }
 
-          .status {
-            padding: 4px 10px;
-            border-radius: 6px;
-            font-size: 13px;
+          .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 16px;
+            font-size: 11px;
             font-weight: bold;
             text-transform: uppercase;
           }
-
-          .status-pending { background: #fef3c7; color: #92400e; }
-          .status-approved { background: #d1fae5; color: #065f46; }
-          .status-completed { background: #dbeafe; color: #1e40af; }
-          .status-cancelled { background: #f3f4f6; color: #374151; }
+          .status-pending {
+            background: #fef3c7;
+            color: #78350f;
+          }
+          .status-approved {
+            background: #d1fae5;
+            color: #065f46;
+          }
+          .status-cancelled {
+            background: #fee2e2;
+            color: #991b1b;
+          }
+          .items-section {
+            margin-top: 25px;
+          }
+          .items-header {
+            color: #dc2626;
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 8px;
+          }
 
           table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 20px;
-            font-size: 14px;
-            background: #fff;
-            border-radius: 8px;
-            overflow: hidden;
+            margin-top: 10px;
+            background: white;
+            border: 1px solid #e2e8f0;
           }
-
-          thead {
-            background: #f5f5f5;
-          }
-
           th, td {
-            border: 1px solid #ddd;
             padding: 10px;
-          }
-
-          th {
             text-align: left;
-            font-weight: 600;
-            color: #444;
+            border: 1px solid #e2e8f0;
           }
-
+          th {
+            background: #f8fafc;
+            font-weight: bold;
+            color: #374151;
+            font-size: 11px;
+            text-transform: uppercase;
+          }
           td {
-            vertical-align: top;
+            font-size: 11px;
           }
-
-          td:nth-child(2),
-          td:nth-child(3) {
-            text-align: center;
+          .text-right { text-align: right; }
+          .text-center { text-align: center; }
+          .font-mono { font-family: 'Courier New', monospace; }
+          .font-bold { font-weight: bold; }
+          .product-info {
+            font-weight: bold;
+            color: #1f2937;
           }
-
-          td:nth-child(4),
-          td:nth-child(5) {
-            text-align: right;
-          }
-
-          .totals {
-            margin-top: 30px;
-            text-align: right;
-            font-size: 15px;
-          }
-
-          .totals p {
-            margin: 5px 0;
-          }
-
-          .totals strong {
-            font-size: 16px;
-            color: #111;
+          .product-details {
+            color: #6b7280;
+            font-size: 10px;
           }
 
           .totals-section {
-            background: #fff;
+            margin-top: 25px;
+            background: #f8fafc;
             padding: 20px;
-            border: 1px solid #ddd;
             border-radius: 8px;
-            margin-top: 20px;
+            border: 1px solid #e2e8f0;
+          }
+          .totals-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            margin-bottom: 20px;
+          }
+          .totals-column {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid #e2e8f0;
+          }
+          .totals-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 11px;
+          }
+          .totals-item.total {
+            font-size: 14px;
+            font-weight: bold;
+            color: #dc2626;
+            border-top: 2px solid #dc2626;
+            padding-top: 8px;
+            margin-top: 12px;
+          }
+          .currency-conversion {
+            background: #f1f5f9;
+            padding: 10px;
+            border-radius: 6px;
+            margin-top: 10px;
+            font-size: 11px;
+            text-align: center;
+            color: #475569;
+          }
+          .footer {
+            margin-top: 30px;
+            text-align: center;
+            color: #6b7280;
+            font-size: 10px;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 15px;
+          }
+          .notes-section {
+            margin: 20px 0;
+            background: #fefefe;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+          }
+          .notes-section h3 {
+            margin: 0 0 10px 0;
+            color: #dc2626;
+            font-size: 14px;
           }
 
-          /* 🔹 Estilos especiales para impresión a color */
           @media print {
             body {
-              background: #fafafa !important;
-              -webkit-print-color-adjust: exact !important;
-              print-color-adjust: exact !important;
+              margin: 0;
+              padding: 15px;
+              font-size: 11px;
             }
-
-            .info-section,
-            .status,
-            table th,
-            table td,
-            .totals-section {
-              -webkit-print-color-adjust: exact !important;
-              print-color-adjust: exact !important;
+            .info-section {
+              flex-direction: column;
+              gap: 10px;
+            }
+            .totals-grid {
+              grid-template-columns: 1fr;
             }
           }
         </style>
@@ -513,74 +578,126 @@ const generateDocumentPDFContent = (): string => {
       <body>
         <div class="header">
           <h1>${docTypeTitle}</h1>
-          <h2>${props.doc.series}-${props.doc.number}</h2>
+          <p><strong>N°:</strong> ${props.doc.series}-${props.doc.number}</p>
+          <p><strong>Fecha de Emisión:</strong> ${issueDate}</p>
         </div>
 
         <div class="info-section">
-          <div class="info-row">
-            <strong>Estado:</strong>
-            <span class="status status-${props.doc.status.toLowerCase()}">${props.doc.status}</span>
-          </div>
-          <div class="info-row">
-            <strong>Fecha de Emisión:</strong>
-            <span>${issueDate}</span>
-          </div>
-          <div class="info-row">
-            <strong>Fecha de Llegada:</strong>
-            <span>${arrivalDate}</span>
-          </div>
-          <div class="info-row">
-            <strong>Proveedor:</strong>
-            <span>${props.doc.supplier_name || 'No especificado'}</span>
-          </div>
-          <div class="info-row">
-            <strong>Moneda:</strong>
-            <span>${props.doc.currency_code}</span>
-          </div>
-          ${props.doc.exchange_rate && props.doc.exchange_rate !== 1 ? `
-          <div class="info-row">
-            <strong>Tipo de Cambio:</strong>
-            <span>${props.doc.exchange_rate.toFixed(6)}</span>
-          </div>
-          ` : ''}
-        </div>
-
-        <table>
-          <thead>
-            <tr>
-              <th>Descripción</th>
-              <th>Cantidad</th>
-              <th>Unidad</th>
-              <th>Precio Unitario</th>
-              <th>Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${itemsHtml}
-          </tbody>
-        </table>
-
-        <div class="totals-section">
-          <div class="totals">
-            <p><strong>Operaciones Gravadas: ${formatCurrency(props.doc.total_ope_gravadas, props.doc.currency_code)}</strong></p>
-            <p><strong>Operaciones Exoneradas: ${formatCurrency(props.doc.total_ope_exoneradas, props.doc.currency_code)}</strong></p>
-            <p><strong>Operaciones Inafectas: ${formatCurrency(props.doc.total_ope_inafectas, props.doc.currency_code)}</strong></p>
-            <p><strong>IGV: ${formatCurrency(props.doc.total_igv, props.doc.currency_code)}</strong></p>
-            <p style="font-size: 18px; margin-top: 15px; border-top: 2px solid #ddd; padding-top: 10px;">
-              <strong>TOTAL: ${formatCurrency(props.doc.total, props.doc.currency_code)}</strong>
-            </p>
-            ${props.doc.currency_code !== 'PEN' && props.doc.total_local ? `
-            <p style="color: #666; font-size: 14px;">
-              <strong>Total en Soles: ${formatCurrency(props.doc.total_local, 'PEN')}</strong>
-            </p>
+          <div class="info-box">
+            <h3>Información del Documento</h3>
+            <div class="info-row">
+              <span class="info-label">Estado:</span>
+              <span class="status-badge status-${props.doc.status.toLowerCase()}">${props.doc.status}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Fecha de Llegada:</span>
+              <span class="info-value">${arrivalDate}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Moneda:</span>
+              <span class="info-value">${props.doc.currency_code}</span>
+            </div>
+            ${props.doc.exchange_rate && props.doc.exchange_rate !== 1 ? `
+            <div class="info-row">
+              <span class="info-label">Tipo de Cambio:</span>
+              <span class="info-value">${props.doc.exchange_rate.toFixed(6)}</span>
+            </div>
             ` : ''}
           </div>
-          ${props.doc.notes ? `
-          <div style="margin-top: 20px; text-align: left;">
-            <strong>Observaciones:</strong>
-            <p style="margin-top: 5px; font-style: italic;">${props.doc.notes}</p>
+
+          <div class="info-box">
+            <h3>Información del Proveedor</h3>
+            <div class="info-row">
+              <span class="info-label">Proveedor:</span>
+              <span class="info-value">${props.doc.supplier_name || 'No especificado'}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Total Items:</span>
+              <span class="info-value">${docItems.value.length}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Importe Total:</span>
+              <span class="info-value">${formatCurrency(props.doc.total, props.doc.currency_code)}</span>
+            </div>
           </div>
-          ` : ''}
+        </div>
+
+        ${props.doc.notes ? `
+        <div class="notes-section">
+          <h3>Observaciones</h3>
+          <p style="margin: 10px 0; color: #374151; line-height: 1.4;">${props.doc.notes}</p>
+        </div>
+        ` : ''}
+
+        <div class="items-section">
+          <div class="items-header">
+            Detalle de Items (${docItems.value.length})
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 35%;">Descripción</th>
+                <th style="width: 12%;" class="text-right">Cantidad</th>
+                <th style="width: 15%;" class="text-right">Precio Unit.</th>
+                <th style="width: 13%;" class="text-center">Afectación</th>
+                <th style="width: 15%;" class="text-right">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemsHtml}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="totals-section">
+          <div class="totals-grid">
+            <div class="totals-column">
+              <h4 style="margin: 0 0 10px 0; color: #dc2626; font-size: 12px;">Operaciones Tributarias</h4>
+              <div class="totals-item">
+                <span>Operaciones Gravadas:</span>
+                <span class="font-mono">${formatCurrency(props.doc.total_ope_gravadas, props.doc.currency_code)}</span>
+              </div>
+              <div class="totals-item">
+                <span>Operaciones Exoneradas:</span>
+                <span class="font-mono">${formatCurrency(props.doc.total_ope_exoneradas, props.doc.currency_code)}</span>
+              </div>
+              <div class="totals-item">
+                <span>Operaciones Inafectas:</span>
+                <span class="font-mono">${formatCurrency(props.doc.total_ope_inafectas, props.doc.currency_code)}</span>
+              </div>
+              <div class="totals-item">
+                <span>IGV (18%):</span>
+                <span class="font-mono">${formatCurrency(props.doc.total_igv, props.doc.currency_code)}</span>
+              </div>
+            </div>
+
+            <div class="totals-column">
+              <h4 style="margin: 0 0 10px 0; color: #dc2626; font-size: 12px;">Resumen Total</h4>
+              <div class="totals-item">
+                <span>Subtotal:</span>
+                <span class="font-mono">${formatCurrency(props.doc.total_ope_gravadas + props.doc.total_ope_exoneradas + props.doc.total_ope_inafectas, props.doc.currency_code)}</span>
+              </div>
+              <div class="totals-item">
+                <span>Total IGV:</span>
+                <span class="font-mono">${formatCurrency(props.doc.total_igv, props.doc.currency_code)}</span>
+              </div>
+              <div class="totals-item total">
+                <span>TOTAL GENERAL:</span>
+                <span class="font-mono">${formatCurrency(props.doc.total, props.doc.currency_code)}</span>
+              </div>
+              ${props.doc.currency_code !== 'PEN' && props.doc.total_local ? `
+              <div class="currency-conversion">
+                <strong>Total en Soles: ${formatCurrency(props.doc.total_local, 'PEN')}</strong>
+              </div>
+              ` : ''}
+            </div>
+          </div>
+        </div>
+
+        <div class="footer">
+          <p>Documento generado el ${new Date().toLocaleString('es-PE')}</p>
+          <p>Sistema de Gestión de Compras</p>
         </div>
       </body>
     </html>
