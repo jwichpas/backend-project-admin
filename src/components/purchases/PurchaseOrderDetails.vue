@@ -375,11 +375,14 @@ const generatePDFContent = (): string => {
   const expectedDate = props.order.expected_delivery_date ? formatDate(props.order.expected_delivery_date) : 'No definida'
   const itemsHtml = items.value.map(item => `
     <tr>
-      <td>${item.product_name || 'Producto'}</td>
-      <td>${item.quantity}</td>
-      <td>${item.unit_code}</td>
-      <td>${formatCurrency(item.unit_price, props.order.currency_code)}</td>
-      <td>${formatCurrency(item.total_line, props.order.currency_code)}</td>
+      <td>
+        <div class="product-info">${item.product_name || 'Producto desconocido'}</div>
+        <div class="product-sku">SKU: ${item.product_sku || 'N/A'}</div>
+      </td>
+      <td class="text-right font-mono">${formatNumber(item.quantity)}</td>
+      <td class="text-center">${item.unit_code || 'UND'}</td>
+      <td class="text-right font-mono">${formatCurrency(item.unit_price, props.order.currency_code)}</td>
+      <td class="text-right font-mono font-bold">${formatCurrency(item.total_line, props.order.currency_code)}</td>
     </tr>
   `).join('')
 
@@ -391,132 +394,186 @@ const generatePDFContent = (): string => {
         <title>Orden de Compra - ${props.order.id}</title>
         <style>
           body {
-            font-family: 'Segoe UI', Arial, sans-serif;
-            margin: 40px;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
             color: #333;
-            background: #fafafa;
+            font-size: 12px;
           }
-
           .header {
             text-align: center;
-            margin-bottom: 40px;
-          }
-
-          .header h1 {
-            margin: 0;
-            font-size: 28px;
-            color: #111;
-            letter-spacing: 1px;
-          }
-
-          .header h2 {
-            margin: 5px 0 0;
-            font-size: 16px;
-            color: #555;
-            font-weight: normal;
-          }
-
-          .info-section {
             margin-bottom: 30px;
-            padding: 20px;
-            background: #fff;
-            border: 1px solid #ddd;
-            border-radius: 8px;
+            border-bottom: 2px solid #2563eb;
+            padding-bottom: 20px;
           }
-
+          .header h1 {
+            color: #2563eb;
+            margin: 0;
+            font-size: 24px;
+            font-weight: bold;
+          }
+          .header p {
+            margin: 5px 0;
+            color: #666;
+            font-size: 14px;
+          }
+          .info-section {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 25px;
+            gap: 20px;
+          }
+          .info-box {
+            flex: 1;
+            background: #f8fafc;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+          }
+          .info-box h3 {
+            margin: 0 0 10px 0;
+            color: #2563eb;
+            font-size: 14px;
+            font-weight: bold;
+          }
           .info-row {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 10px;
-            font-size: 14px;
+            margin-bottom: 8px;
           }
-
-          .info-row strong {
-            color: #444;
+          .info-label {
+            font-weight: bold;
+            color: #374151;
           }
-
-          .status {
-            padding: 4px 10px;
-            border-radius: 6px;
-            font-size: 13px;
+          .info-value {
+            color: #6b7280;
+          }
+          .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 16px;
+            font-size: 11px;
             font-weight: bold;
             text-transform: uppercase;
           }
-
-          .status-pending { background: #fef3c7; color: #92400e; }
-          .status-approved { background: #d1fae5; color: #065f46; }
-          .status-completed { background: #dbeafe; color: #1e40af; }
-          .status-rejected { background: #fecaca; color: #991b1b; }
-          .status-cancelled { background: #f3f4f6; color: #374151; }
-
+          .status-pending {
+            background: #fef3c7;
+            color: #78350f;
+          }
+          .status-approved {
+            background: #d1fae5;
+            color: #065f46;
+          }
+          .status-rejected {
+            background: #fee2e2;
+            color: #991b1b;
+          }
+          .items-section {
+            margin-top: 25px;
+          }
+          .items-header {
+            color: #2563eb;
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 8px;
+          }
           table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 20px;
-            font-size: 14px;
-            background: #fff;
-            border-radius: 8px;
-            overflow: hidden;
+            margin-top: 10px;
+            background: white;
+            border: 1px solid #e2e8f0;
           }
-
-          thead {
-            background: #f5f5f5;
-          }
-
           th, td {
-            border: 1px solid #ddd;
             padding: 10px;
-          }
-
-          th {
             text-align: left;
-            font-weight: 600;
-            color: #444;
+            border: 1px solid #e2e8f0;
           }
-
+          th {
+            background: #f8fafc;
+            font-weight: bold;
+            color: #374151;
+            font-size: 11px;
+            text-transform: uppercase;
+          }
           td {
-            vertical-align: top;
+            font-size: 11px;
           }
-
-          td:nth-child(2),
-          td:nth-child(3) {
+          .text-right { text-align: right; }
+          .text-center { text-align: center; }
+          .font-mono { font-family: 'Courier New', monospace; }
+          .font-bold { font-weight: bold; }
+          .product-info {
+            font-weight: bold;
+            color: #1f2937;
+          }
+          .product-sku {
+            color: #6b7280;
+            font-size: 10px;
+          }
+          .summary-section {
+            margin-top: 25px;
+            background: #f8fafc;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+          }
+          .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+          }
+          .summary-item {
             text-align: center;
           }
-
-          td:nth-child(4),
-          td:nth-child(5) {
-            text-align: right;
+          .summary-label {
+            font-size: 11px;
+            color: #6b7280;
+            text-transform: uppercase;
+            margin-bottom: 5px;
           }
-
-          .totals {
+          .summary-value {
+            font-size: 18px;
+            font-weight: bold;
+            color: #2563eb;
+          }
+          .summary-total {
+            color: #1f2937;
+          }
+          .footer {
             margin-top: 30px;
-            text-align: right;
-            font-size: 15px;
+            text-align: center;
+            color: #6b7280;
+            font-size: 10px;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 15px;
           }
-
-          .totals p {
-            margin: 5px 0;
+          .notes-section {
+            margin: 20px 0;
+            background: #fefefe;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
           }
-
-          .totals strong {
-            font-size: 16px;
-            color: #111;
+          .notes-section h3 {
+            margin: 0 0 10px 0;
+            color: #2563eb;
+            font-size: 14px;
           }
-
-          /* 🔹 Estilos especiales para impresión a color */
           @media print {
             body {
-              background: #fafafa !important;
-              -webkit-print-color-adjust: exact !important;
-              print-color-adjust: exact !important;
+              margin: 0;
+              padding: 15px;
+              font-size: 11px;
             }
-
-            .info-section,
-            .status,
-            table th,
-            table td {
-              -webkit-print-color-adjust: exact !important;
-              print-color-adjust: exact !important;
+            .info-section {
+              flex-direction: column;
+              gap: 10px;
+            }
+            .summary-grid {
+              grid-template-columns: repeat(2, 1fr);
             }
           }
         </style>
@@ -524,50 +581,92 @@ const generatePDFContent = (): string => {
       <body>
         <div class="header">
           <h1>ORDEN DE COMPRA</h1>
-          <h2>#${props.order.id}</h2>
+          <p><strong>N°:</strong> ${props.order.id}</p>
+          <p><strong>Fecha:</strong> ${orderDate}</p>
         </div>
 
         <div class="info-section">
-          <div class="info-row">
-            <strong>Estado:</strong>
-            <span class="status status-${props.order.status.toLowerCase()}">${getStatusText(props.order.status)}</span>
+          <div class="info-box">
+            <h3>Información de la Orden</h3>
+            <div class="info-row">
+              <span class="info-label">Estado:</span>
+              <span class="status-badge status-${props.order.status.toLowerCase()}">${getStatusText(props.order.status)}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Fecha Esperada:</span>
+              <span class="info-value">${expectedDate}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Moneda:</span>
+              <span class="info-value">${props.order.currency_code}</span>
+            </div>
           </div>
-          <div class="info-row">
-            <strong>Fecha de Orden:</strong>
-            <span>${orderDate}</span>
-          </div>
-          <div class="info-row">
-            <strong>Fecha Esperada:</strong>
-            <span>${expectedDate}</span>
-          </div>
-          <div class="info-row">
-            <strong>Proveedor:</strong>
-            <span>${props.order.supplier_name || 'Proveedor desconocido'}</span>
-          </div>
-          <div class="info-row">
-            <strong>Moneda:</strong>
-            <span>${props.order.currency_code}</span>
+
+          <div class="info-box">
+            <h3>Información del Proveedor</h3>
+            <div class="info-row">
+              <span class="info-label">Empresa:</span>
+              <span class="info-value">${props.order.supplier_name || 'No especificado'}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Total Items:</span>
+              <span class="info-value">${items.value.length}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Importe Total:</span>
+              <span class="info-value">${formatCurrency(totalAmount.value, props.order.currency_code)}</span>
+            </div>
           </div>
         </div>
 
-        <table>
-          <thead>
-            <tr>
-              <th>Producto</th>
-              <th>Cantidad</th>
-              <th>Unidad</th>
-              <th>Precio Unitario</th>
-              <th>Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${itemsHtml}
-          </tbody>
-        </table>
+        ${props.order.notes ? `
+        <div class="notes-section">
+          <h3>Observaciones</h3>
+          <p style="margin: 10px 0; color: #374151; line-height: 1.4;">${props.order.notes}</p>
+        </div>
+        ` : ''}
 
-        <div class="totals">
-          <p><strong>Subtotal: ${formatCurrency(subtotal.value, props.order.currency_code)}</strong></p>
-          <p><strong>Total: ${formatCurrency(props.order.total_amount, props.order.currency_code)}</strong></p>
+        <div class="items-section">
+          <div class="items-header">
+            Detalle de Items (${items.value.length})
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 40%;">Producto</th>
+                <th style="width: 12%;" class="text-right">Cantidad</th>
+                <th style="width: 10%;" class="text-center">Unidad</th>
+                <th style="width: 19%;" class="text-right">Precio Unit.</th>
+                <th style="width: 19%;" class="text-right">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemsHtml}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="summary-section">
+          <div class="summary-grid">
+            <div class="summary-item">
+              <div class="summary-label">Total Items</div>
+              <div class="summary-value">${items.value.length}</div>
+            </div>
+            <div class="summary-item">
+              <div class="summary-label">Cantidad Total</div>
+              <div class="summary-value">${formatNumber(totalQuantity.value)}</div>
+            </div>
+            <div class="summary-item">
+              <div class="summary-label">Importe Total</div>
+              <div class="summary-value summary-total">${formatCurrency(totalAmount.value, props.order.currency_code)}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="footer">
+          <p>Documento generado el ${new Date().toLocaleString('es-PE')}</p>
+          <p>Sistema de Gestión de Compras</p>
         </div>
       </body>
     </html>

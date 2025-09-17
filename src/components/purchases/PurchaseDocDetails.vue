@@ -344,11 +344,18 @@ const generateDocumentPDFContent = (): string => {
 
   const itemsHtml = docItems.value.map(item => `
     <tr>
-      <td>${item.description || 'Producto'}</td>
-      <td>${item.quantity}</td>
-      <td>${item.unit_code}</td>
-      <td>${formatCurrency(item.unit_cost, props.doc.currency_code)}</td>
-      <td>${formatCurrency(item.quantity * item.unit_cost, props.doc.currency_code)}</td>
+      <td>
+        <div class="product-info">${item.description || 'Producto desconocido'}</div>
+        <div class="product-details">Unidad: ${item.unit_code || 'UND'}</div>
+      </td>
+      <td class="text-right font-mono">${formatNumber(item.quantity)}</td>
+      <td class="text-right font-mono">${formatCurrency(item.unit_cost, props.doc.currency_code)}</td>
+      <td class="text-center">
+        ${item.igv_affectation === '10' ? 'Gravada' :
+          item.igv_affectation === '20' ? 'Exonerada' :
+          item.igv_affectation === '30' ? 'Inafecta' : 'N/A'}
+      </td>
+      <td class="text-right font-mono font-bold">${formatCurrency(item.quantity * item.unit_cost, props.doc.currency_code)}</td>
     </tr>
   `).join('')
 
