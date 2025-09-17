@@ -526,6 +526,7 @@ import { useCompaniesStore } from '@/stores/companies'
 import { useBranchesStore } from '@/stores/branches'
 import { useThemeStore } from '@/stores/theme'
 import { useAuthStore } from '@/stores/auth'
+import { useProductsStore } from '@/stores/products'
 import {
   Menu, LayoutDashboard, Settings, Moon, Sun, User,
   Receipt, Users, ShoppingCart, Truck, Package, Package2, Warehouse, BarChart3,
@@ -556,6 +557,7 @@ const companiesStore = useCompaniesStore()
 const branchesStore = useBranchesStore()
 const themeStore = useThemeStore()
 const authStore = useAuthStore()
+const productsStore = useProductsStore()
 
 const isCollapsed = ref(false)
 const userMenuOpen = ref(false)
@@ -577,7 +579,7 @@ const toggleWarehousesMenu = () => { warehousesMenuOpen.value = !warehousesMenuO
 const toggleNotifications = () => { notificationsOpen.value = !notificationsOpen.value }
 
 // Company and Branch selection
-const selectedCompanyId = ref<string | null>(null)
+const selectedCompanyId = ref<string | null>(localStorage.getItem('selectedCompanyId') || null)
 const selectedBranchId = ref<string | null>(localStorage.getItem('selectedBranchId') || null)
 
 // Available branches for the selected company
@@ -601,9 +603,26 @@ const unreadNotifications = computed(() => {
   return notifications.value.filter(n => !n.read).length
 })
 
+// Refresh products when company changes
+const refreshProductsForCompany = async () => {
+  if (selectedCompanyId.value) {
+    try {
+      // Clear current products and fetch for new company
+      productsStore.products = []
+      productsStore.activeProducts = []
+      await productsStore.fetchProducts(selectedCompanyId.value)
+    } catch (error) {
+      console.error('Error refreshing products for company:', error)
+    }
+  }
+}
+
 // Handlers for selector changes
 const onCompanyChange = async () => {
   if (selectedCompanyId.value) {
+    // Persist company selection
+    localStorage.setItem('selectedCompanyId', selectedCompanyId.value)
+
     // Set current company in the store
     const userCompany = companiesStore.userCompanies.find(uc => uc.company.id === selectedCompanyId.value)
     if (userCompany) {
@@ -618,10 +637,20 @@ const onCompanyChange = async () => {
     if (savedBranchId && branchesStore.branches.find(b => b.id === savedBranchId)) {
       selectedBranchId.value = savedBranchId
     } else {
-      selectedBranchId.value = ''
-      localStorage.removeItem('selectedBranchId')
+      // Auto-select first branch if available
+      if (branchesStore.branches.length > 0) {
+        selectedBranchId.value = branchesStore.branches[0].id
+        localStorage.setItem('selectedBranchId', selectedBranchId.value)
+      } else {
+        selectedBranchId.value = ''
+        localStorage.removeItem('selectedBranchId')
+      }
     }
+
+    // Refresh products for the new company
+    await refreshProductsForCompany()
   } else {
+    localStorage.removeItem('selectedCompanyId')
     companiesStore.currentCompany = null
     branchesStore.reset()
     selectedBranchId.value = ''
@@ -821,22 +850,44 @@ onMounted(async () => {
   if (authStore.user) {
     await companiesStore.fetchUserCompanies(authStore.user.id)
 
-    // Auto-select first company if available and none is selected
-    if (companiesStore.userCompanies.length > 0 && !selectedCompanyId.value) {
-      const firstUserCompany = companiesStore.userCompanies[0]
-      selectedCompanyId.value = firstUserCompany.company.id
-      companiesStore.setCurrentCompany(firstUserCompany.company)
+    // Restore saved company or auto-select first company if available
+    if (companiesStore.userCompanies.length > 0) {
+      let companyToSelect = null
+
+      // Check if saved company exists and user has access to it
+      if (selectedCompanyId.value) {
+        const savedUserCompany = companiesStore.userCompanies.find(uc => uc.company.id === selectedCompanyId.value)
+        if (savedUserCompany) {
+          companyToSelect = savedUserCompany
+        }
+      }
+
+      // If no valid saved company, select the first one
+      if (!companyToSelect) {
+        companyToSelect = companiesStore.userCompanies[0]
+        selectedCompanyId.value = companyToSelect.company.id
+        localStorage.setItem('selectedCompanyId', selectedCompanyId.value)
+      }
+
+      // Set current company
+      companiesStore.setCurrentCompany(companyToSelect.company)
 
       // Load branches for the selected company
-      await branchesStore.fetchAll(firstUserCompany.company.id)
+      await branchesStore.fetchAll(companyToSelect.company.id)
 
       // Load exchange rates for the selected company
-      await fetchExchangeRates(firstUserCompany.company)
+      await fetchExchangeRates(companyToSelect.company)
 
-      // Restore saved branch selection if valid for this company
+      // Load products for the selected company
+      await refreshProductsForCompany()
+
+      // Restore saved branch selection if valid for this company, or select first branch
       const savedBranchId = localStorage.getItem('selectedBranchId')
       if (savedBranchId && branchesStore.branches.find(b => b.id === savedBranchId)) {
         selectedBranchId.value = savedBranchId
+      } else if (branchesStore.branches.length > 0) {
+        selectedBranchId.value = branchesStore.branches[0].id
+        localStorage.setItem('selectedBranchId', selectedBranchId.value)
       }
     }
   }
