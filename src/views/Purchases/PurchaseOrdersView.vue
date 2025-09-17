@@ -224,6 +224,9 @@
             :order="selectedOrder"
             @close="showViewOrderDialog = false"
             @edit="handleEditFromView"
+            @approve="handleApproveOrder"
+            @reject="handleRejectOrder"
+            @cancel-order="handleCancelOrder"
           />
         </div>
       </DialogContent>
@@ -428,6 +431,30 @@ const handleSaveOrder = async (orderData: any) => {
 const handleEditFromView = (order: PurchaseOrder) => {
   showViewOrderDialog.value = false
   editOrder(order)
+}
+
+const handleApproveOrder = async (order: PurchaseOrder) => {
+  await approveOrder(order)
+  if (selectedOrder.value && selectedOrder.value.id === order.id) {
+    // Update selected order status
+    selectedOrder.value = { ...selectedOrder.value, status: 'APPROVED' }
+  }
+}
+
+const handleRejectOrder = async (order: PurchaseOrder) => {
+  await rejectOrder(order)
+  if (selectedOrder.value && selectedOrder.value.id === order.id) {
+    // Update selected order status
+    selectedOrder.value = { ...selectedOrder.value, status: 'REJECTED' }
+  }
+}
+
+const handleCancelOrder = async (order: PurchaseOrder) => {
+  await cancelOrder(order)
+  if (selectedOrder.value && selectedOrder.value.id === order.id) {
+    // Update selected order status
+    selectedOrder.value = { ...selectedOrder.value, status: 'CANCELLED' }
+  }
 }
 
 const approveOrder = async (order: PurchaseOrder | null) => {

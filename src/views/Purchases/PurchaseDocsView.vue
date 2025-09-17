@@ -13,7 +13,7 @@
           <Download class="mr-2 h-4 w-4" />
           Exportar
         </Button>
-        <Button size="sm" @click="showCreateDocDialog = true">
+        <Button size="sm" @click="$router.push('/purchases/docs/new')">
           <Plus class="mr-2 h-4 w-4" />
           Nuevo Documento
         </Button>
@@ -265,20 +265,6 @@
       </CardContent>
     </Card>
 
-    <!-- Create Document Dialog -->
-    <Dialog v-model:open="showCreateDocDialog">
-      <DialogContent class="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader class="flex-shrink-0">
-          <DialogTitle>Nuevo Documento de Compra</DialogTitle>
-        </DialogHeader>
-        <div class="flex-1 overflow-y-auto pr-2 -mr-2">
-          <PurchaseDocForm
-            @save="handleSaveDoc"
-            @cancel="showCreateDocDialog = false"
-          />
-        </div>
-      </DialogContent>
-    </Dialog>
 
     <!-- View Document Dialog -->
     <Dialog v-model:open="showViewDocDialog">
@@ -340,7 +326,6 @@ import DialogHeader from '@/components/ui/DialogHeader.vue'
 import DialogTitle from '@/components/ui/DialogTitle.vue'
 
 // Purchase Components (to be created)
-import PurchaseDocForm from '@/components/purchases/PurchaseDocForm.vue'
 import PurchaseDocDetails from '@/components/purchases/PurchaseDocDetails.vue'
 
 const companyStore = useCompanyStore()
@@ -352,7 +337,6 @@ const selectedDocType = ref('')
 const selectedSupplier = ref('')
 const selectedCurrency = ref('')
 const selectedDateRange = ref('')
-const showCreateDocDialog = ref(false)
 const showViewDocDialog = ref(false)
 const selectedDoc = ref<PurchaseDoc | null>(null)
 
@@ -476,15 +460,6 @@ const showDocActions = (doc: PurchaseDoc) => {
   console.log('Show actions for doc:', doc)
 }
 
-const handleSaveDoc = async (docData: any) => {
-  try {
-    await purchasesStore.createPurchaseDoc(docData)
-    showCreateDocDialog.value = false
-    await refreshData()
-  } catch (error) {
-    console.error('Error saving doc:', error)
-  }
-}
 
 const handleEditFromView = (doc: PurchaseDoc) => {
   showViewDocDialog.value = false

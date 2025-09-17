@@ -64,10 +64,26 @@ export interface PurchaseDoc {
   total_ope_exoneradas_usd: number
   total_ope_exoneradas_clp: number
   total_ope_inafectas: number
+  total_ope_inafectas_local: number
+  total_ope_inafectas_usd: number
+  total_ope_inafectas_clp: number
+  total_igv: number
+  total_igv_local: number
+  total_igv_usd: number
+  total_igv_clp: number
+  total_isc: number
+  total_descuentos: number
+  total_otros_cargos: number
+  total: number
+  total_local?: number
+  total_usd?: number
+  total_clp?: number
+  status: string
+  notes?: string
   created_at: string
   updated_at: string
   deleted_at?: string
-  
+
   // Datos relacionados
   supplier_name?: string
   doc_type_description?: string

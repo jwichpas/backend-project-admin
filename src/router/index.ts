@@ -118,6 +118,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/purchases/docs/new',
+      name: 'purchases-docs-new',
+      component: () => import('../views/Purchases/NewPurchaseDocView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/purchases/receptions',
       name: 'purchases-receptions',
       component: () => import('../views/Purchases/ReceptionsView.vue'),

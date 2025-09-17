@@ -204,178 +204,191 @@
               <p class="text-xs text-muted-foreground">Agrega productos para comenzar</p>
             </div>
 
-            <div v-else class="space-y-2">
+            <div v-else class="space-y-3">
               <div
                 v-for="(item, index) in cartItems"
                 :key="index"
-                class="bg-background border border-border rounded-lg p-3"
+                class="relative bg-card border border-border rounded-xl shadow-sm transition-all duration-200"
+                :class="{
+                  'animate-pulse': processing,
+                  'hover:shadow-md transform hover:scale-[1.02]': editingItemIndex !== index,
+                  'shadow-lg border-primary/30': editingItemIndex === index
+                }"
               >
-                <div class="flex items-start justify-between mb-2">
-                  <div class="flex items-start gap-3 flex-1">
-                    <!-- Product thumbnail -->
-                    <div class="w-10 h-10 bg-muted rounded-md flex items-center justify-center overflow-hidden flex-shrink-0">
-                      <template v-if="item.product.main_image && !isImageError(item.product.product_id)">
-                        <img
-                          :src="item.product.main_image"
-                          :alt="item.product.product_name"
-                          class="w-full h-full object-cover"
-                          @error="() => handleImageError(item.product.product_id)"
-                        />
+                <!-- Cart Item View (Normal or Edit Mode) -->
+                <div class="p-4">
+                  <!-- Product Header -->
+                  <div class="flex items-start justify-between mb-3">
+                    <div class="flex items-start gap-3 flex-1">
+                      <!-- Product thumbnail -->
+                      <div class="w-12 h-12 bg-muted rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
+                        <template v-if="item.product.main_image && !isImageError(item.product.product_id)">
+                          <img
+                            :src="item.product.main_image"
+                            :alt="item.product.product_name"
+                            class="w-full h-full object-cover"
+                            @error="() => handleImageError(item.product.product_id)"
+                          />
+                        </template>
+                        <Package v-else class="h-5 w-5 text-muted-foreground" />
+                      </div>
+                      <!-- Product info -->
+                      <div class="flex-1">
+                        <h4 class="font-semibold text-sm text-foreground">{{ item.product.product_name }}</h4>
+                        <p class="text-xs text-muted-foreground">{{ item.product.sku }}</p>
+                        <p v-if="editingItemIndex === index" class="text-xs text-muted-foreground">Stock: {{ item.product.available_stock || 0 }}</p>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-1">
+                      <!-- Edit/Save/Cancel Buttons -->
+                      <template v-if="editingItemIndex === index">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          class="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                          @click="closeEditModal"
+                          title="Cancelar"
+                        >
+                          <X class="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          class="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
+                          @click="saveEditChanges"
+                          title="Guardar"
+                        >
+                          <Check class="h-4 w-4" />
+                        </Button>
                       </template>
-                      <Package v-else class="h-4 w-4 text-gray-500" />
-                    </div>
-                    <!-- Product info -->
-                    <div class="flex-1">
-                      <h4 class="font-medium text-sm">{{ item.product.product_name }}</h4>
-                      <p class="text-xs text-muted-foreground">{{ item.product.sku }}</p>
-                      <!-- Unit Display/Edit -->
-                      <div class="flex items-center gap-1 mt-1">
-                        <div v-if="editingUnit[index]" class="flex items-center gap-1">
-                          <select
-                            :value="item.selected_unit || item.product.unit_code"
-                            @change="changeUnit(index, ($event.target as HTMLSelectElement).value)"
-                            class="text-xs border border-input rounded px-1 py-0.5 bg-background min-w-[80px]"
-                          >
-                            <option
-                              v-for="unit in getAvailableUnitsForItem(item)"
-                              :key="unit.code"
-                              :value="unit.code"
-                            >
-                              {{ unit.name }}
-                            </option>
-                          </select>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            class="h-8 w-8 p-0"
-                            @click="cancelUnitEdit(index)"
-                          >
-                            <X class="h-6 w-6 text-gray-600" />
-                          </Button>
-                        </div>
-                        <div v-else class="flex items-center gap-1">
-                          <span class="text-xs text-blue-600 font-medium">
-                            {{ getUnitName(item.selected_unit || item.product.unit_code) }}
-                          </span>
-                          <Button
-                            v-if="getAvailableUnitsForItem(item).length > 1"
-                            variant="ghost"
-                            size="sm"
-                            class="h-8 w-8 p-0"
-                            @click="startUnitEdit(index)"
-                          >
-                            <Pencil class="h-6 w-6 text-blue-600" />
-                          </Button>
-                        </div>
-                      </div>
+                      <template v-else>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          class="h-8 w-8 p-0 text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all duration-200"
+                          @click="startEditingItem(index)"
+                          title="Editar item"
+                        >
+                          <Pencil class="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          class="h-8 w-8 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-all duration-200"
+                          @click="removeFromCart(index)"
+                          title="Eliminar item"
+                        >
+                          <X class="h-4 w-4" />
+                        </Button>
+                      </template>
                     </div>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    class="h-7 w-7 p-1"
-                    @click="removeFromCart(index)"
-                  >
-                    <X class="h-8 w-8 text-red-600" />
-                  </Button>
-                </div>
 
-                <div class="flex items-center justify-between">
-                  <div class="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      class="h-7 w-7 p-1"
-                      @click="updateQuantity(index, item.quantity - 1)"
-                      :disabled="item.quantity <= 1"
+                  <!-- Unit Selection (Edit Mode Only) -->
+                  <div v-if="editingItemIndex === index && availableUnitsForEdit.length > 1" class="mb-3">
+                    <label class="text-xs font-medium text-muted-foreground mb-1 block">Unidad de medida</label>
+                    <select
+                      v-model="editForm.selected_unit"
+                      @change="handleEditUnitChange($event.target.value)"
+                      class="w-full p-2 text-sm border border-input rounded-lg bg-background focus:outline-none focus:ring-1 focus:ring-primary/50 transition-all"
                     >
-                      <Minus class="h-6 w-6 text-red-600" />
-                    </Button>
-
-                    <!-- Quantity Display/Edit -->
-                    <div v-if="editingQuantity[index]" class="flex items-center gap-1">
-                      <input
-                        type="number"
-                        :value="item.quantity"
-                        @blur="saveQuantity(index, Number($event.target.value))"
-                        @keyup.enter="$event.target.blur()"
-                        @keyup.escape="cancelQuantityEdit(index)"
-                        class="w-12 h-6 text-sm text-center border border-input rounded px-1 bg-background"
-                        min="1"
-                        ref="quantityInput"
-                      />
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        class="h-7 w-7 p-1"
-                        @click="saveQuantity(index, item.quantity)"
+                      <option
+                        v-for="unit in availableUnitsForEdit"
+                        :key="unit.code"
+                        :value="unit.code"
                       >
-                        <Check class="h-5 w-5 text-green-600" />
-                      </Button>
-                    </div>
-                    <div v-else class="flex items-center gap-1">
-                      <span class="text-sm font-medium w-8 text-center">{{ item.quantity }}</span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        class="h-7 w-7 p-1"
-                        @click="startQuantityEdit(index)"
-                      >
-                        <Pencil class="h-4 w-4" />
-                      </Button>
-                    </div>
-
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      class="h-7 w-7 p-1"
-                      @click="updateQuantity(index, item.quantity + 1)"
-                    >
-                      <Plus class="h-6 w-6 text-green-600" />
-                    </Button>
+                        {{ unit.name }}
+                      </option>
+                    </select>
                   </div>
-                  <div class="text-right">
-                    <!-- Unit Price Display/Edit -->
-                    <div class="text-xs text-muted-foreground mb-1 flex items-center justify-end gap-1">
-                      <div v-if="editingPrice[index]" class="flex items-center gap-1">
+
+                  <!-- Main Controls -->
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <!-- Quantity Controls -->
+                      <template v-if="editingItemIndex === index">
+                        <!-- Edit Mode: Input with +/- buttons -->
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          class="h-10 w-10 p-1"
+                          @click="editForm.quantity = Math.max(1, editForm.quantity - 1)"
+                          :disabled="editForm.quantity <= 1"
+                        >
+                          <Minus class="h-4 w-4" />
+                        </Button>
                         <input
+                          v-model.number="editForm.quantity"
                           type="number"
-                          :value="item.unit_price"
-                          @blur="saveUnitPrice(index, Number($event.target.value))"
-                          @keyup.enter="$event.target.blur()"
-                          @keyup.escape="cancelPriceEdit(index)"
-                          class="w-16 h-5 text-xs text-right border border-input rounded px-1 bg-background"
-                          min="0"
-                          step="0.01"
-                          ref="priceInput"
+                          min="1"
+                          class="w-16 h-10 text-sm text-center border border-input rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary/50"
                         />
                         <Button
-                          variant="ghost"
+                          variant="outline"
                           size="sm"
-                          class="h-7 w-7 p-1"
-                          @click="saveUnitPrice(index, item.unit_price)"
+                          class="h-10 w-10 p-1"
+                          @click="editForm.quantity++"
                         >
-                          <Check class="h-5 w-5 text-green-600" />
+                          <Plus class="h-4 w-4" />
                         </Button>
-                      </div>
-                      <div v-else class="flex items-center gap-1">
-                        <span>{{ formatCurrency(item.unit_price) }}</span>
+                      </template>
+                      <template v-else>
+                        <!-- Normal Mode: +/- buttons with display -->
                         <Button
-                          variant="ghost"
+                          variant="outline"
                           size="sm"
-                          class="h-7 w-7 p-1"
-                          @click="startPriceEdit(index)"
+                          class="h-10 w-10 p-1"
+                          @click="updateQuantity(index, item.quantity - 1)"
+                          :disabled="item.quantity <= 1"
                         >
-                          <Pencil class="h-4 w-4 text-blue-600" />
+                          <Minus class="h-8 w-8 text-red-600" />
                         </Button>
+                        <div class="text-center">
+                          <span class="text-sm font-medium">{{ item.quantity }}</span>
+                          <div class="text-xs text-muted-foreground">{{ getUnitName(item.selected_unit || item.product.unit_code) }}</div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          class="h-10 w-10 p-1"
+                          @click="updateQuantity(index, item.quantity + 1)"
+                        >
+                          <Plus class="h-8 w-8 text-green-600" />
+                        </Button>
+                      </template>
+                  </div>
+                    <div class="text-right">
+                      <!-- Unit Price Display/Edit -->
+                      <div class="text-xs text-muted-foreground mb-1 flex items-center justify-end gap-1">
+                        <template v-if="editingItemIndex === index">
+                          <!-- Edit Mode: Direct input -->
+                          <span>S/</span>
+                          <input
+                            v-model.number="editForm.unit_price"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            class="w-20 h-6 text-xs text-right border border-input rounded px-1 bg-background focus:outline-none focus:ring-1 focus:ring-primary/50"
+                          />
+                        </template>
+                        <template v-else>
+                          <!-- Normal Mode: Display only -->
+                          <span>{{ formatCurrency(item.unit_price) }}</span>
+                        </template>
+                        <span>c/u</span>
                       </div>
-                      <span>c/u</span>
+                      <p class="font-bold text-sm">
+                        <template v-if="editingItemIndex === index">
+                          {{ formatCurrency(editFormTotal) }}
+                        </template>
+                        <template v-else>
+                          {{ formatCurrency(item.total) }}
+                        </template>
+                      </p>
                     </div>
-                    <p class="font-bold text-sm">
-                      {{ formatCurrency(item.total) }}
-                    </p>
                   </div>
                 </div>
+
               </div>
             </div>
           </div>
@@ -758,6 +771,55 @@
         </div>
       </DialogContent>
     </Dialog>
+
+
+    <!-- Toast Notifications -->
+    <div class="fixed top-4 right-4 z-50 space-y-2">
+      <div
+        v-for="toast in toasts"
+        :key="toast.id"
+        class="max-w-md w-auto p-4 rounded-lg shadow-lg border transform transition-all duration-300 ease-in-out animate-in slide-in-from-right"
+        :class="{
+          'bg-red-50 border-red-200 text-red-800': toast.type === 'error',
+          'bg-yellow-50 border-yellow-200 text-yellow-800': toast.type === 'warning',
+          'bg-green-50 border-green-200 text-green-800': toast.type === 'success',
+          'bg-blue-50 border-blue-200 text-blue-800': toast.type === 'info'
+        }"
+      >
+        <div class="flex items-start justify-between gap-3">
+          <div class="flex items-start gap-3 flex-1">
+            <div class="flex-shrink-0 mt-0.5">
+              <AlertCircle
+                v-if="toast.type === 'error'"
+                class="h-5 w-5 text-red-500"
+              />
+              <AlertTriangle
+                v-else-if="toast.type === 'warning'"
+                class="h-5 w-5 text-yellow-500"
+              />
+              <CheckCircle
+                v-else-if="toast.type === 'success'"
+                class="h-5 w-5 text-green-500"
+              />
+              <Info
+                v-else
+                class="h-5 w-5 text-blue-500"
+              />
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="font-semibold text-sm">{{ toast.title }}</p>
+              <p class="text-sm opacity-90 mt-1">{{ toast.message }}</p>
+            </div>
+          </div>
+          <button
+            @click="removeToast(toast.id)"
+            class="flex-shrink-0 p-1 hover:bg-black/10 rounded-full transition-colors"
+          >
+            <X class="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -786,7 +848,15 @@ import {
   Check,
   Printer,
   AlertCircle,
-  CheckCircle
+  CheckCircle,
+  AlertTriangle,
+  Info,
+  ChevronDown,
+  Scale,
+  Hash,
+  DollarSign,
+  Calculator,
+  ArrowLeftRight
 } from 'lucide-vue-next'
 
 // UI Components
@@ -829,7 +899,294 @@ const showProductDialog = ref(false)
 const showCustomerDialog = ref(false)
 const failedImages = ref(new Set<string>())
 
-// Edit states
+// Edit item modal
+const editingItemIndex = ref<number>(-1)
+const editForm = ref({
+  quantity: 1,
+  unit_price: 0,
+  selected_unit: '',
+  total: 0
+})
+const availableUnitsForEdit = ref<Array<{code: string, name: string}>>([])
+const currentEditingUnit = ref<string>('') // Track the unit before v-model changes
+
+// Toast notifications
+const toasts = ref<Array<{
+  id: string
+  type: 'error' | 'warning' | 'success' | 'info'
+  title: string
+  message: string
+  duration?: number
+}>>([])
+
+const showToast = (type: 'error' | 'warning' | 'success' | 'info', title: string, message: string, duration = 5000) => {
+  const id = Date.now().toString()
+  toasts.value.push({ id, type, title, message, duration })
+
+  setTimeout(() => {
+    removeToast(id)
+  }, duration)
+}
+
+const removeToast = (id: string) => {
+  const index = toasts.value.findIndex(toast => toast.id === id)
+  if (index > -1) {
+    toasts.value.splice(index, 1)
+  }
+}
+
+// New editing functions for redesigned interface
+const startEditingItem = async (index: number) => {
+  const item = cartItems.value[index]
+
+  console.log('🚀 Starting edit for item:', item.product.product_name)
+  console.log('📦 Item details:', {
+    quantity: item.quantity,
+    unit_price: item.unit_price,
+    selected_unit: item.selected_unit,
+    product_unit_code: item.product.unit_code,
+    base_quantity: item.base_quantity
+  })
+
+  try {
+    // Load conversions directly from product_unit_conversions table
+    const { data: conversions, error } = await supabase
+      .from('product_unit_conversions')
+      .select('*')
+      .eq('product_id', item.product.product_id)
+
+    if (error) {
+      console.error('Error loading conversions:', error)
+    }
+
+    console.log('📊 Loaded conversions:', conversions)
+
+    // Load SUNAT units for display names
+    const { data: sunatUnits, error: unitsError } = await supabase.rpc('get_sunat_measurement_units')
+
+    if (unitsError) {
+      console.error('Error loading SUNAT units:', unitsError)
+    }
+
+    // Create units map for names
+    const unitsMap = new Map(
+      sunatUnits?.map((unit: any) => [unit.code, unit.descripcion]) || []
+    )
+
+    // Get all unique units from conversions
+    const uniqueUnits = new Set<string>()
+
+    // Add current product unit
+    uniqueUnits.add(item.product.unit_code)
+
+    // Add units from conversions
+    conversions?.forEach(conv => {
+      uniqueUnits.add(conv.from_unit)
+      uniqueUnits.add(conv.to_unit)
+    })
+
+    // Build available units array
+    availableUnitsForEdit.value = Array.from(uniqueUnits).map(unitCode => ({
+      code: unitCode,
+      name: unitsMap.get(unitCode) || unitCode
+    }))
+
+    console.log('📋 Available units for edit:', availableUnitsForEdit.value)
+
+    editingItemIndex.value = index
+
+    // Use the current selected unit from the cart item
+    const currentUnit = item.selected_unit || item.product.unit_code
+
+    editForm.value = {
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+      selected_unit: currentUnit,
+      total: item.total
+    }
+
+    // Track the current unit separately
+    currentEditingUnit.value = currentUnit
+
+    console.log('📝 Edit form initialized with:', editForm.value)
+  } catch (error) {
+    console.error('Error in startEditingItem:', error)
+  }
+}
+
+const stopEditingItem = (index: number) => {
+  if (editingItems.value[index]) {
+    editingItems.value[index].mode = null
+  }
+}
+
+const saveEditChanges = async () => {
+  const index = editingItemIndex.value
+  if (index === -1) return
+
+  const item = cartItems.value[index]
+
+  // Validate stock before saving
+  let requiredBaseQuantity = editForm.value.quantity
+  if (editForm.value.selected_unit !== item.product.unit_code) {
+    requiredBaseQuantity = await productConversions.convertQuantity(
+      item.product.product_id,
+      editForm.value.selected_unit,
+      item.product.unit_code,
+      editForm.value.quantity
+    ) || editForm.value.quantity
+  }
+
+  const availableStock = item.product.available_stock || item.product.total_stock || 0
+  if (requiredBaseQuantity > availableStock) {
+    showToast(
+      'warning',
+      'Stock Insuficiente',
+      `Solo tienes ${availableStock} ${getUnitName(item.product.unit_code)} disponibles`
+    )
+    return
+  }
+
+  // Apply changes with animation
+  item.quantity = editForm.value.quantity
+  item.unit_price = editForm.value.unit_price
+  item.selected_unit = editForm.value.selected_unit
+  item.total = editForm.value.total
+  item.base_quantity = requiredBaseQuantity
+
+  // Close modal
+  closeEditModal()
+
+  // Show success toast
+  showToast('success', 'Item Actualizado', 'Los cambios se han guardado correctamente')
+}
+
+const closeEditModal = () => {
+  // Close inline edit overlay
+  editingItemIndex.value = -1
+  editForm.value = {
+    quantity: 1,
+    unit_price: 0,
+    selected_unit: '',
+    total: 0
+  }
+  availableUnitsForEdit.value = []
+  currentEditingUnit.value = ''
+}
+
+// Computed for edit form
+const editFormTotal = computed(() => {
+  return editForm.value.quantity * editForm.value.unit_price
+})
+
+// Watch for changes in edit form to update total
+watch([() => editForm.value.quantity, () => editForm.value.unit_price], () => {
+  editForm.value.total = editFormTotal.value
+})
+
+// Handle unit change in edit form
+const handleEditUnitChange = async (newUnit: string) => {
+  console.log('🔄 handleEditUnitChange called with:', newUnit)
+
+  const index = editingItemIndex.value
+  console.log('🔍 editingItemIndex:', index)
+
+  if (index === -1) {
+    console.log('❌ No item being edited')
+    return
+  }
+
+  const item = cartItems.value[index]
+
+  // Use the tracked current unit (before v-model updates)
+  const currentUnit = currentEditingUnit.value
+
+  console.log('📦 Current item:', item.product.product_name)
+  console.log('🔄 Changing unit from', currentUnit, 'to', newUnit)
+
+  if (currentUnit === newUnit) {
+    console.log('⚠️ Same unit selected, skipping')
+    return
+  }
+
+  try {
+    // Query product_unit_conversions table directly
+    const { data: conversions, error } = await supabase
+      .from('product_unit_conversions')
+      .select('*')
+      .eq('product_id', item.product.product_id)
+
+    if (error) {
+      console.error('Error fetching conversions:', error)
+      showToast('error', 'Error', 'No se pudieron cargar las conversiones')
+      return
+    }
+
+    console.log('📊 Available conversions:', conversions)
+
+    // Find conversion factor between current and new unit
+    let conversionFactor = null
+    let conversionDirection = null
+
+    // Look for direct conversion (currentUnit -> newUnit)
+    const directConversion = conversions?.find(c =>
+      c.from_unit === currentUnit && c.to_unit === newUnit
+    )
+
+    if (directConversion) {
+      conversionFactor = directConversion.conversion_factor
+      conversionDirection = 'direct'
+      console.log('✅ Direct conversion found:', conversionFactor)
+    } else {
+      // Look for inverse conversion (newUnit -> currentUnit)
+      const inverseConversion = conversions?.find(c =>
+        c.from_unit === newUnit && c.to_unit === currentUnit
+      )
+
+      if (inverseConversion) {
+        conversionFactor = 1 / inverseConversion.conversion_factor
+        conversionDirection = 'inverse'
+        console.log('🔄 Inverse conversion found:', conversionFactor)
+      }
+    }
+
+    if (conversionFactor && conversionFactor > 0) {
+      // Calculate new unit price
+      // If 1 currentUnit = conversionFactor newUnits, then
+      // price per newUnit = currentPrice / conversionFactor
+      const newUnitPrice = editForm.value.unit_price / conversionFactor
+
+      console.log('💰 Price calculation:')
+      console.log('   Current price:', editForm.value.unit_price)
+      console.log('   Conversion factor:', conversionFactor)
+      console.log('   Direction:', conversionDirection)
+      console.log('   New price:', newUnitPrice)
+
+      editForm.value.selected_unit = newUnit
+      editForm.value.unit_price = newUnitPrice
+      editForm.value.quantity = 1 // Reset to 1 when changing units
+
+      // Update the tracked current unit
+      currentEditingUnit.value = newUnit
+
+      // Show toast notification
+      showToast('info', 'Unidad Cambiada', `Precio ajustado de ${formatCurrency(editForm.value.unit_price)} a ${formatCurrency(newUnitPrice)}`)
+    } else {
+      console.warn('❌ No conversion found between', currentUnit, 'and', newUnit)
+      showToast('warning', 'Conversión no disponible', `No existe conversión entre ${currentUnit} y ${newUnit}`)
+    }
+  } catch (error) {
+    console.error('Error in unit conversion:', error)
+    showToast('error', 'Error de Conversión', 'No se pudo cambiar la unidad de medida')
+  }
+}
+
+// Edit states - simplified to single edit mode per item
+const editingItems = ref<Record<number, {
+  mode: 'quantity' | 'price' | 'unit' | null
+}>>({})
+
+// Legacy states for compatibility (will be removed after redesign)
 const editingQuantity = ref<Record<number, boolean>>({})
 const editingPrice = ref<Record<number, boolean>>({})
 const editingUnit = ref<Record<number, boolean>>({})
@@ -1111,12 +1468,27 @@ const addToCart = async (product: any) => {
     // Load conversions for this product
     await productConversions.fetchConversions(product.product_id)
 
+    // Determine the actual base unit by checking conversions
+    // The base unit is typically the "to_unit" in conversions
+    const conversions = productConversions.getAvailableConversions(product.product_id, product.unit_code)
+    let actualBaseUnit = product.unit_code
+
+    // If there are conversions and current unit appears as "from_unit",
+    // then the "to_unit" is likely the base unit
+    if (conversions && conversions.length > 0) {
+      const conversion = conversions.find(c => c.from_unit === product.unit_code)
+      if (conversion) {
+        actualBaseUnit = conversion.to_unit
+        console.log('🔍 Found conversion, using base unit:', actualBaseUnit, 'instead of', product.unit_code)
+      }
+    }
+
     cartItems.value.push({
       product,
       quantity: 1,
       unit_price: product.unit_price || 0,
       total: product.unit_price || 0,
-      selected_unit: product.unit_code,
+      selected_unit: actualBaseUnit, // Use actual base unit
       base_quantity: 1
     })
   }
@@ -1126,11 +1498,57 @@ const removeFromCart = (index: number) => {
   cartItems.value.splice(index, 1)
 }
 
-const updateQuantity = (index: number, newQuantity: number) => {
+const updateQuantity = async (index: number, newQuantity: number) => {
   if (newQuantity < 1) return
 
-  cartItems.value[index].quantity = newQuantity
-  cartItems.value[index].total = cartItems.value[index].unit_price * newQuantity
+  const item = cartItems.value[index]
+
+  // Calculate required base quantity
+  let requiredBaseQuantity = newQuantity
+  if (item.selected_unit && item.selected_unit !== item.product.unit_code) {
+    requiredBaseQuantity = await productConversions.convertQuantity(
+      item.product.product_id,
+      item.selected_unit,
+      item.product.unit_code,
+      newQuantity
+    ) || newQuantity
+  }
+
+  // Check if we have enough stock
+  const availableStock = item.product.available_stock || item.product.total_stock || 0
+
+  console.log('Stock validation:', {
+    product: item.product.product_name,
+    available_stock: item.product.available_stock,
+    total_stock: item.product.total_stock,
+    finalAvailableStock: availableStock,
+    requiredBaseQuantity,
+    currentUnit: item.selected_unit || item.product.unit_code,
+    baseUnit: item.product.unit_code
+  })
+
+  if (requiredBaseQuantity > availableStock) {
+    const maxUnitsInCurrentUnit = item.selected_unit !== item.product.unit_code
+      ? await productConversions.convertQuantity(
+          item.product.product_id,
+          item.product.unit_code,
+          item.selected_unit,
+          availableStock
+        ) || availableStock
+      : availableStock
+
+    showToast(
+      'warning',
+      'Stock Insuficiente',
+      `Solo tienes ${availableStock} ${getUnitName(item.product.unit_code)} disponibles (${maxUnitsInCurrentUnit.toFixed(2)} ${getUnitName(item.selected_unit || item.product.unit_code)})`
+    )
+    return
+  }
+
+  // Update quantities
+  item.quantity = newQuantity
+  item.total = item.unit_price * newQuantity
+  item.base_quantity = requiredBaseQuantity
 }
 
 const updateUnitPrice = (index: number, newPrice: number) => {
@@ -1200,26 +1618,121 @@ const changeUnit = async (index: number, newUnit: string) => {
   }
 
   try {
-    // Convert quantity to new unit
-    const convertedQuantity = await productConversions.convertQuantity(
+    const currentUnit = item.selected_unit || item.product.unit_code
+
+    // Get conversion factor between current unit and new unit
+    const conversionFactor = productConversions.getConversionFactor(
       item.product.product_id,
-      item.selected_unit || item.product.unit_code,
-      newUnit,
-      item.quantity
+      currentUnit,
+      newUnit
     )
 
-    if (convertedQuantity !== null) {
-      item.selected_unit = newUnit
-      item.quantity = convertedQuantity
-      item.total = item.unit_price * convertedQuantity
+    if (conversionFactor !== null) {
+      // The conversion factor tells us: from_unit -> to_unit
+      // Example: BX -> LTR = 12 means 1 caja = 12 litros
 
-      // Update base quantity for reference
+      const isFromBaseUnit = currentUnit === item.product.unit_code
+      const isToBaseUnit = newUnit === item.product.unit_code
+
+      let newUnitPrice = item.unit_price
+
+      if (isFromBaseUnit && !isToBaseUnit) {
+        // Converting FROM base unit (ltr) TO other unit (bx)
+        // We need to find how many base units are in 1 converted unit
+        // If BX -> LTR = 12, then 1 caja = 12 litros
+        // So: precio_caja = precio_litro × 12
+
+        // Find the conversion that tells us how many base units per converted unit
+        const baseToConvertedFactor = await productConversions.convertQuantity(
+          item.product.product_id,
+          item.product.unit_code, // from base
+          newUnit, // to converted
+          1
+        )
+
+        if (baseToConvertedFactor) {
+          // If 1 base unit converts to 0.083 converted units
+          // Then 1 converted unit = 1/0.083 = 12 base units
+          const convertedUnitToBaseUnits = 1 / baseToConvertedFactor
+          newUnitPrice = item.unit_price * convertedUnitToBaseUnits
+        }
+      } else if (!isFromBaseUnit && isToBaseUnit) {
+        // Converting FROM other unit (bx) TO base unit (ltr)
+        // If currently 1 caja = S/180, then 1 litro = S/180 ÷ 12 = S/15
+
+        // Find how many base units the current unit represents
+        const currentUnitInBaseUnits = await productConversions.convertQuantity(
+          item.product.product_id,
+          currentUnit, // from current
+          item.product.unit_code, // to base
+          1
+        )
+
+        if (currentUnitInBaseUnits) {
+          newUnitPrice = item.unit_price / currentUnitInBaseUnits
+        }
+      } else {
+        // Converting between two non-base units
+        // Convert current price to base first, then to new unit
+        const currentToBase = await productConversions.convertQuantity(
+          item.product.product_id,
+          currentUnit,
+          item.product.unit_code,
+          1
+        )
+
+        const baseToNew = await productConversions.convertQuantity(
+          item.product.product_id,
+          item.product.unit_code,
+          newUnit,
+          1
+        )
+
+        if (currentToBase && baseToNew) {
+          const basePricePerUnit = item.unit_price / currentToBase
+          newUnitPrice = basePricePerUnit / baseToNew
+        }
+      }
+
+      // Update item properties
+      item.selected_unit = newUnit
+      item.quantity = 1 // Always reset to 1 when changing units
+      item.unit_price = newUnitPrice
+      item.total = newUnitPrice * 1
+
+      // Calculate base quantity for database storage
+      // Convert current display quantity (1) back to base unit
       item.base_quantity = await productConversions.convertQuantity(
         item.product.product_id,
         newUnit,
         item.product.unit_code,
-        convertedQuantity
-      ) || convertedQuantity
+        1
+      ) || 1
+
+      // Validate stock availability in new unit
+      const availableStock = item.product.available_stock || item.product.total_stock || 0
+      if (item.base_quantity > availableStock) {
+        const maxUnitsInNewUnit = await productConversions.convertQuantity(
+          item.product.product_id,
+          item.product.unit_code,
+          newUnit,
+          availableStock
+        ) || availableStock
+
+        showToast(
+          'warning',
+          'Stock Insuficiente para esta Unidad',
+          `Solo tienes ${availableStock} ${getUnitName(item.product.unit_code)} disponibles (${maxUnitsInNewUnit.toFixed(2)} ${getUnitName(newUnit)})`
+        )
+        editingUnit.value[index] = false
+        return
+      }
+
+      console.log(`Unit changed: ${currentUnit} -> ${newUnit}`)
+      console.log(`Conversion factor: ${conversionFactor}`)
+      console.log(`New unit price: ${newUnitPrice}`)
+      console.log(`Base quantity: ${item.base_quantity}`)
+      console.log(`Available stock: ${availableStock} ${getUnitName(item.product.unit_code)}`)
     }
   } catch (error) {
     console.error('Error converting unit:', error)
@@ -1332,15 +1845,30 @@ const prepareSaleData = async () => {
       total_local: cartTotal.value,
       igv_affectation: '10',
       created_by: authStore.user?.id,
-      items: cartItems.value.map(item => ({
-        product_id: item.product.product_id,
-        description: item.product.product_name,
-        unit_code: item.selected_unit || item.product.unit_code || 'NIU',
-        quantity: item.quantity,
-        unit_price: item.unit_price,
-        igv_affectation: '10',
-        total_line: item.total
-      }))
+      items: cartItems.value.map(item => {
+        // For database storage, always use base unit and base quantity
+        const baseQuantity = item.base_quantity || item.quantity
+        const baseUnitCode = item.product.unit_code || 'NIU'
+
+        // Calculate unit price in base unit
+        // If we have 1 caja (S/15) but base is 12 units, then unit price = 15/12 = 1.25
+        const baseUnitPrice = item.total / baseQuantity
+
+        return {
+          product_id: item.product.product_id,
+          description: item.product.product_name,
+          unit_code: baseUnitCode, // Always use product's base unit for database
+          quantity: baseQuantity, // Use converted quantity in base unit
+          unit_price: baseUnitPrice, // Price per base unit
+          igv_affectation: '10',
+          total_line: item.total, // Total remains the same
+
+          // Additional fields for display purposes
+          display_unit: item.selected_unit || baseUnitCode,
+          display_quantity: item.quantity,
+          display_unit_price: item.unit_price
+        }
+      })
     }
 
   return salesDocData
@@ -1530,15 +2058,32 @@ const generateTicketHTML = () => {
     </div>
 
     <div class="dashed">
-      ${cartItems.value.map(item => `
-        <div class="item">
-          <div class="bold">${item.product.product_name}</div>
-          <div class="flex">
-            <span>${item.quantity.toFixed(2)} ${getUnitName(item.selected_unit || item.product.unit_code)} x ${formatCurrency(item.unit_price)}</span>
-            <span>${formatCurrency(item.total)}</span>
-          </div>
-        </div>
-      `).join('')}
+      ${cartItems.value.map(item => {
+        const baseQuantity = item.base_quantity || item.quantity
+        const baseUnit = getUnitName(item.product.unit_code)
+        const displayUnit = getUnitName(item.selected_unit || item.product.unit_code)
+        const baseUnitPrice = item.total / baseQuantity
+
+        // Main line: base unit quantity and price
+        let itemLine = `
+          <div class="item">
+            <div class="bold">${item.product.product_name}</div>
+            <div class="flex">
+              <span>${baseQuantity.toFixed(2)} ${baseUnit} x ${formatCurrency(baseUnitPrice)}</span>
+              <span>${formatCurrency(item.total)}</span>
+            </div>`
+
+        // If using converted unit, add converted line below
+        if (item.selected_unit && item.selected_unit !== item.product.unit_code) {
+          itemLine += `
+            <div style="font-size: 10px; margin-left: 10px; color: #666;">
+              (${item.quantity} ${displayUnit})
+            </div>`
+        }
+
+        itemLine += `</div>`
+        return itemLine
+      }).join('')}
     </div>
 
     <div class="dashed">

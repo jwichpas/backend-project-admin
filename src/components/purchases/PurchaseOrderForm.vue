@@ -212,20 +212,13 @@
         <div class="space-y-4">
           <div>
             <label class="text-sm font-medium">Producto *</label>
-            <select
+            <ProductSearchSelect
               v-model="newItem.product_id"
-              class="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              required
-            >
-              <option value="">Seleccionar producto</option>
-              <option 
-                v-for="product in productsStore.activeProducts" 
-                :key="product.id" 
-                :value="product.id"
-              >
-                {{ product.name }} ({{ product.sku }})
-              </option>
-            </select>
+              :company-id="companyStore.selectedCompany?.id"
+              placeholder="Buscar producto por nombre, SKU o código..."
+              :show-stock="true"
+              @product-selected="handleProductSelected"
+            />
           </div>
 
           <div>
@@ -312,6 +305,7 @@ import DialogContent from '@/components/ui/DialogContent.vue'
 import DialogHeader from '@/components/ui/DialogHeader.vue'
 import DialogTitle from '@/components/ui/DialogTitle.vue'
 import DialogFooter from '@/components/ui/DialogFooter.vue'
+import ProductSearchSelect from '@/components/ui/ProductSearchSelect.vue'
 
 const emit = defineEmits<{
   save: [data: any]
@@ -496,6 +490,13 @@ const cancelAddItem = () => {
     quantity: 1,
     unit_price: 0,
     discount_pct: 0
+  }
+}
+
+const handleProductSelected = (product: any) => {
+  if (product) {
+    newItem.value.unit_code = product.unit_code
+    newItem.value.description = product.name
   }
 }
 

@@ -290,8 +290,8 @@ const purchasesStore = usePurchasesStore()
 const loading = ref(false)
 
 // Computed
-const receptionItems = computed(() => 
-  purchasesStore.getReceptionItems(props.reception.id)
+const receptionItems = computed(() =>
+  purchasesStore.receptionItems.filter(item => item.reception_id === props.reception.id)
 )
 
 const totalQuantity = computed(() => 
@@ -383,9 +383,356 @@ const refreshItems = async () => {
 }
 
 const printReception = () => {
-  // TODO: Implement print functionality
-  console.log('Print reception:', props.reception)
-  // This could open a print-friendly version or generate a PDF
+  const printContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>Recepción de Mercadería - ${formatDate(props.reception.reception_date)}</title>
+      <style>
+        body {
+          font-family: Arial, sans-serif;
+          margin: 0;
+          padding: 20px;
+          color: #333;
+          font-size: 12px;
+        }
+        .header {
+          text-align: center;
+          margin-bottom: 30px;
+          border-bottom: 2px solid #059669;
+          padding-bottom: 20px;
+        }
+        .header h1 {
+          color: #059669;
+          margin: 0;
+          font-size: 24px;
+          font-weight: bold;
+        }
+        .header p {
+          margin: 5px 0;
+          color: #666;
+          font-size: 14px;
+        }
+        .info-section {
+          display: flex;
+          justify-content: space-between;
+          margin-bottom: 25px;
+          gap: 20px;
+        }
+        .info-box {
+          flex: 1;
+          background: #f8fafc;
+          padding: 15px;
+          border-radius: 8px;
+          border: 1px solid #e2e8f0;
+        }
+        .info-box h3 {
+          margin: 0 0 10px 0;
+          color: #059669;
+          font-size: 14px;
+          font-weight: bold;
+        }
+        .info-row {
+          display: flex;
+          justify-content: space-between;
+          margin-bottom: 8px;
+        }
+        .info-label {
+          font-weight: bold;
+          color: #374151;
+        }
+        .info-value {
+          color: #6b7280;
+        }
+        .status-badge {
+          display: inline-block;
+          padding: 4px 12px;
+          border-radius: 16px;
+          font-size: 11px;
+          font-weight: bold;
+          text-transform: uppercase;
+        }
+        .status-partial {
+          background: #fef3c7;
+          color: #78350f;
+        }
+        .status-complete {
+          background: #d1fae5;
+          color: #065f46;
+        }
+        .status-rejected {
+          background: #fee2e2;
+          color: #991b1b;
+        }
+        .items-section {
+          margin-top: 25px;
+        }
+        .items-header {
+          color: #059669;
+          font-size: 16px;
+          font-weight: bold;
+          margin-bottom: 15px;
+          border-bottom: 1px solid #e2e8f0;
+          padding-bottom: 8px;
+        }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-top: 10px;
+          background: white;
+          border: 1px solid #e2e8f0;
+        }
+        th, td {
+          padding: 10px;
+          text-align: left;
+          border: 1px solid #e2e8f0;
+        }
+        th {
+          background: #f8fafc;
+          font-weight: bold;
+          color: #374151;
+          font-size: 11px;
+          text-transform: uppercase;
+        }
+        td {
+          font-size: 11px;
+        }
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+        .font-mono { font-family: 'Courier New', monospace; }
+        .product-info {
+          font-weight: bold;
+          color: #1f2937;
+        }
+        .product-sku {
+          color: #6b7280;
+          font-size: 10px;
+        }
+        .summary-section {
+          margin-top: 25px;
+          background: #f8fafc;
+          padding: 20px;
+          border-radius: 8px;
+          border: 1px solid #e2e8f0;
+        }
+        .summary-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 20px;
+        }
+        .summary-item {
+          text-align: center;
+        }
+        .summary-label {
+          font-size: 11px;
+          color: #6b7280;
+          text-transform: uppercase;
+          margin-bottom: 5px;
+        }
+        .summary-value {
+          font-size: 18px;
+          font-weight: bold;
+          color: #059669;
+        }
+        .summary-total {
+          color: #1f2937;
+        }
+        .footer {
+          margin-top: 30px;
+          text-align: center;
+          color: #6b7280;
+          font-size: 10px;
+          border-top: 1px solid #e2e8f0;
+          padding-top: 15px;
+        }
+        .related-docs {
+          margin: 20px 0;
+          background: #fefefe;
+          padding: 15px;
+          border-radius: 8px;
+          border: 1px solid #e2e8f0;
+        }
+        .related-docs h3 {
+          margin: 0 0 10px 0;
+          color: #059669;
+          font-size: 14px;
+        }
+        .doc-item {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin: 8px 0;
+          padding: 8px;
+          background: #f1f5f9;
+          border-radius: 4px;
+        }
+        .doc-type {
+          font-weight: bold;
+          color: #334155;
+          font-size: 11px;
+        }
+        .doc-number {
+          color: #64748b;
+          font-size: 11px;
+        }
+        @media print {
+          body {
+            margin: 0;
+            padding: 15px;
+            font-size: 11px;
+          }
+          .info-section {
+            flex-direction: column;
+            gap: 10px;
+          }
+          .summary-grid {
+            grid-template-columns: repeat(2, 1fr);
+          }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>RECEPCIÓN DE MERCADERÍA</h1>
+        <p><strong>Fecha:</strong> ${formatDate(props.reception.reception_date)}</p>
+        <p><strong>Almacén:</strong> ${props.reception.warehouse_name || 'No especificado'}</p>
+      </div>
+
+      <div class="info-section">
+        <div class="info-box">
+          <h3>Información General</h3>
+          <div class="info-row">
+            <span class="info-label">Estado:</span>
+            <span class="status-badge status-${props.reception.status.toLowerCase()}">${getStatusText(props.reception.status)}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Fecha de Registro:</span>
+            <span class="info-value">${formatDateTime(props.reception.created_at)}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Progreso:</span>
+            <span class="info-value">${getStatusPercentage(props.reception.status)}%</span>
+          </div>
+        </div>
+
+        <div class="info-box">
+          <h3>Resumen de Items</h3>
+          <div class="info-row">
+            <span class="info-label">Total de Items:</span>
+            <span class="info-value">${receptionItems.value.length}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Cantidad Total:</span>
+            <span class="info-value">${formatNumber(totalQuantity.value)}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Valor Estimado:</span>
+            <span class="info-value">${formatCurrency(totalValue.value, 'PEN')}</span>
+          </div>
+        </div>
+      </div>
+
+      ${props.reception.purchase_doc_number || props.reception.purchase_order_number ? `
+      <div class="related-docs">
+        <h3>Documentos Relacionados</h3>
+        ${props.reception.purchase_doc_number ? `
+        <div class="doc-item">
+          <span class="doc-type">📄 Documento de Compra:</span>
+          <span class="doc-number">${props.reception.purchase_doc_number}</span>
+        </div>
+        ` : ''}
+        ${props.reception.purchase_order_number ? `
+        <div class="doc-item">
+          <span class="doc-type">🛒 Orden de Compra:</span>
+          <span class="doc-number">${props.reception.purchase_order_number}</span>
+        </div>
+        ` : ''}
+      </div>
+      ` : ''}
+
+      ${props.reception.notes ? `
+      <div class="related-docs">
+        <h3>Observaciones</h3>
+        <p style="margin: 10px 0; color: #374151; line-height: 1.4;">${props.reception.notes}</p>
+      </div>
+      ` : ''}
+
+      <div class="items-section">
+        <div class="items-header">
+          Detalle de Items Recibidos (${receptionItems.value.length})
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 35%;">Producto</th>
+              <th style="width: 12%;" class="text-right">Cantidad</th>
+              <th style="width: 12%;" class="text-right">Costo Unit.</th>
+              <th style="width: 15%;">Lote/Serie</th>
+              <th style="width: 13%;" class="text-right">Total</th>
+              <th style="width: 13%;">Observaciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${receptionItems.value.map(item => `
+              <tr>
+                <td>
+                  <div class="product-info">${item.product_name || 'Producto desconocido'}</div>
+                  <div class="product-sku">SKU: ${item.product_sku || 'N/A'}</div>
+                </td>
+                <td class="text-right font-mono">${formatNumber(item.quantity_received)}</td>
+                <td class="text-right font-mono">${formatCurrency(item.unit_cost, 'PEN')}</td>
+                <td class="text-center">
+                  ${item.batch_number ? `<div><strong>Lote:</strong> ${item.batch_number}</div>` : ''}
+                  ${item.serial_number ? `<div><strong>Serie:</strong> ${item.serial_number}</div>` : ''}
+                  ${!item.batch_number && !item.serial_number ? '<span style="color: #9ca3af;">-</span>' : ''}
+                </td>
+                <td class="text-right font-mono" style="font-weight: bold;">
+                  ${formatCurrency(item.quantity_received * item.unit_cost, 'PEN')}
+                </td>
+                <td>${item.notes || '<span style="color: #9ca3af;">-</span>'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="summary-section">
+        <div class="summary-grid">
+          <div class="summary-item">
+            <div class="summary-label">Items Recibidos</div>
+            <div class="summary-value">${receptionItems.value.length}</div>
+          </div>
+          <div class="summary-item">
+            <div class="summary-label">Cantidad Total</div>
+            <div class="summary-value">${formatNumber(totalQuantity.value)}</div>
+          </div>
+          <div class="summary-item">
+            <div class="summary-label">Valor Total Estimado</div>
+            <div class="summary-value summary-total">${formatCurrency(totalValue.value, 'PEN')}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer">
+        <p>Documento generado el ${new Date().toLocaleString('es-PE')}</p>
+        <p>Sistema de Gestión de Inventarios</p>
+      </div>
+    </body>
+    </html>
+  `
+
+  const printWindow = window.open('', '_blank')
+  if (printWindow) {
+    printWindow.document.write(printContent)
+    printWindow.document.close()
+    printWindow.focus()
+    setTimeout(() => {
+      printWindow.print()
+      printWindow.close()
+    }, 250)
+  }
 }
 
 const completeReception = async () => {

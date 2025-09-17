@@ -1,6 +1,11 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(npx supabase db reset:*)"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "shadcn"
-  ],
-  "enableAllProjectMcpServers": true
+  ]
 }

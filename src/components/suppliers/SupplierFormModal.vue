@@ -55,21 +55,19 @@
             </div>
           </div>
 
-          <div class="grid gap-4 md:grid-cols-2">
+          <!-- Name fields based on party type -->
+          <div v-if="form.party_type === 'company'" class="space-y-4">
             <div class="space-y-2">
-              <Label for="name">
-                {{ form.party_type === 'company' ? 'Razón Social' : 'Nombres y Apellidos' }} *
-              </Label>
+              <Label for="razon_social">Razón Social *</Label>
               <Input
-                id="name"
+                id="razon_social"
                 v-model="form.name"
-                :placeholder="form.party_type === 'company' ? 'Ej: ACME Corp S.A.C.' : 'Ej: Juan Pérez García'"
+                placeholder="Ej: ACME Corp S.A.C."
                 required
                 maxlength="100"
               />
             </div>
-
-            <div v-if="form.party_type === 'company'" class="space-y-2">
+            <div class="space-y-2">
               <Label for="commercial_name">Nombre Comercial</Label>
               <Input
                 id="commercial_name"
@@ -77,6 +75,39 @@
                 placeholder="Ej: ACME Store"
                 maxlength="100"
               />
+            </div>
+          </div>
+
+          <div v-else class="space-y-4">
+            <div class="space-y-2">
+              <Label for="nombres">Nombres *</Label>
+              <Input
+                id="nombres"
+                v-model="form.nombres"
+                placeholder="Ej: Juan Carlos"
+                required
+                maxlength="100"
+              />
+            </div>
+            <div class="grid gap-4 md:grid-cols-2">
+              <div class="space-y-2">
+                <Label for="apellido_paterno">Apellido Paterno</Label>
+                <Input
+                  id="apellido_paterno"
+                  v-model="form.apellido_paterno"
+                  placeholder="Ej: Pérez"
+                  maxlength="50"
+                />
+              </div>
+              <div class="space-y-2">
+                <Label for="apellido_materno">Apellido Materno</Label>
+                <Input
+                  id="apellido_materno"
+                  v-model="form.apellido_materno"
+                  placeholder="Ej: García"
+                  maxlength="50"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -294,6 +325,10 @@ const form = ref<CreateSupplierRequest>({
   doc_type: '',
   doc_number: '',
   name: '',
+  nombres: '',
+  apellido_paterno: '',
+  apellido_materno: '',
+  razon_social: '',
   commercial_name: '',
   email: '',
   phone: '',
@@ -303,7 +338,12 @@ const form = ref<CreateSupplierRequest>({
   reference: '',
   ubigeo: '',
   coordinates: '',
-  notes: ''
+  country_code: 'PE',
+  notes: '',
+  contacts: [],
+  locations: [],
+  establecimientos: [],
+  representantes: []
 })
 
 const loading = ref(false)
@@ -318,12 +358,17 @@ const partyTypeOptions = computed(() => [
 ])
 
 const isFormValid = computed(() => {
-  return !!(
+  const baseValid = !!(
     form.value.party_type &&
     form.value.doc_type &&
-    form.value.doc_number.trim() &&
-    form.value.name.trim()
+    form.value.doc_number.trim()
   )
+
+  if (form.value.party_type === 'company') {
+    return baseValid && form.value.name.trim()
+  } else {
+    return baseValid && form.value.nombres?.trim()
+  }
 })
 
 // Methods
@@ -333,6 +378,10 @@ const resetForm = () => {
     doc_type: '',
     doc_number: '',
     name: '',
+    nombres: '',
+    apellido_paterno: '',
+    apellido_materno: '',
+    razon_social: '',
     commercial_name: '',
     email: '',
     phone: '',
@@ -342,7 +391,12 @@ const resetForm = () => {
     reference: '',
     ubigeo: '',
     coordinates: '',
-    notes: ''
+    country_code: 'PE',
+    notes: '',
+    contacts: [],
+    locations: [],
+    establecimientos: [],
+    representantes: []
   }
 }
 
@@ -352,6 +406,10 @@ const loadFormData = (supplier: Supplier) => {
     doc_type: supplier.doc_type,
     doc_number: supplier.doc_number,
     name: supplier.name,
+    nombres: supplier.nombres || '',
+    apellido_paterno: supplier.apellido_paterno || '',
+    apellido_materno: supplier.apellido_materno || '',
+    razon_social: supplier.razon_social || '',
     commercial_name: supplier.commercial_name || '',
     email: supplier.email || '',
     phone: supplier.phone || '',
@@ -359,9 +417,14 @@ const loadFormData = (supplier: Supplier) => {
     website: supplier.website || '',
     address: supplier.address || '',
     reference: supplier.reference || '',
-    ubigeo: supplier.ubigeo || '',
+    ubigeo: supplier.ubigeo_code || '',
     coordinates: supplier.coordinates || '',
-    notes: supplier.notes || ''
+    country_code: supplier.country_code || 'PE',
+    notes: supplier.notes || '',
+    contacts: supplier.contacts || [],
+    locations: supplier.locations || [],
+    establecimientos: supplier.establecimientos || [],
+    representantes: supplier.representantes || []
   }
 }
 
@@ -458,8 +521,31 @@ watch(() => form.value.party_type, (newType) => {
   if (newType === 'individual') {
     form.value.commercial_name = ''
     form.value.website = ''
+    form.value.name = ''
+    form.value.razon_social = ''
+  } else {
+    form.value.nombres = ''
+    form.value.apellido_paterno = ''
+    form.value.apellido_materno = ''
   }
 })
+
+// Sync name field for company
+watch(() => form.value.name, (newName) => {
+  if (form.value.party_type === 'company') {
+    form.value.razon_social = newName
+  }
+})
+
+// Sync name field for individual (combine nombres + apellidos)
+watch([() => form.value.nombres, () => form.value.apellido_paterno, () => form.value.apellido_materno],
+  ([nombres, paterno, materno]) => {
+    if (form.value.party_type === 'individual') {
+      const fullName = [nombres, paterno, materno].filter(Boolean).join(' ')
+      form.value.name = fullName
+    }
+  }
+)
 
 watch(() => form.value.doc_type, (newDocType) => {
   // Clear doc number when doc type changes

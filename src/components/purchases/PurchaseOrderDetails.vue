@@ -274,8 +274,8 @@ const purchasesStore = usePurchasesStore()
 const itemsLoading = ref(false)
 
 // Computed
-const items = computed(() => 
-  purchasesStore.getPurchaseOrderItems(props.order.id)
+const items = computed(() =>
+  purchasesStore.purchaseOrderItems.filter(item => item.purchase_order_id === props.order.id)
 )
 
 const subtotal = computed(() => {
@@ -345,9 +345,233 @@ const getStatusText = (status: string) => {
   return statusMap[status] || status
 }
 
-const exportToPDF = () => {
-  // TODO: Implement PDF export
-  console.log('Export to PDF:', props.order)
+const exportToPDF = async () => {
+  try {
+    // Create PDF content
+    const pdfContent = generatePDFContent()
+
+    // Create and download PDF
+    const link = document.createElement('a')
+    const blob = new Blob([pdfContent], { type: 'text/html' })
+    const url = URL.createObjectURL(blob)
+
+    // Open in new window for printing
+    const printWindow = window.open(url, '_blank')
+    if (printWindow) {
+      printWindow.onload = () => {
+        printWindow.print()
+      }
+    }
+
+    // Clean up
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  } catch (error) {
+    console.error('Error exporting PDF:', error)
+  }
+}
+
+const generatePDFContent = (): string => {
+  const orderDate = formatDate(props.order.order_date)
+  const expectedDate = props.order.expected_delivery_date ? formatDate(props.order.expected_delivery_date) : 'No definida'
+  const itemsHtml = items.value.map(item => `
+    <tr>
+      <td>${item.product_name || 'Producto'}</td>
+      <td>${item.quantity}</td>
+      <td>${item.unit_code}</td>
+      <td>${formatCurrency(item.unit_price, props.order.currency_code)}</td>
+      <td>${formatCurrency(item.total_line, props.order.currency_code)}</td>
+    </tr>
+  `).join('')
+
+  return `
+    <!DOCTYPE html>
+    <html lang="es">
+      <head>
+        <meta charset="utf-8">
+        <title>Orden de Compra - ${props.order.id}</title>
+        <style>
+          body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            margin: 40px;
+            color: #333;
+            background: #fafafa;
+          }
+
+          .header {
+            text-align: center;
+            margin-bottom: 40px;
+          }
+
+          .header h1 {
+            margin: 0;
+            font-size: 28px;
+            color: #111;
+            letter-spacing: 1px;
+          }
+
+          .header h2 {
+            margin: 5px 0 0;
+            font-size: 16px;
+            color: #555;
+            font-weight: normal;
+          }
+
+          .info-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+          }
+
+          .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 14px;
+          }
+
+          .info-row strong {
+            color: #444;
+          }
+
+          .status {
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: bold;
+            text-transform: uppercase;
+          }
+
+          .status-pending { background: #fef3c7; color: #92400e; }
+          .status-approved { background: #d1fae5; color: #065f46; }
+          .status-completed { background: #dbeafe; color: #1e40af; }
+          .status-rejected { background: #fecaca; color: #991b1b; }
+          .status-cancelled { background: #f3f4f6; color: #374151; }
+
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            font-size: 14px;
+            background: #fff;
+            border-radius: 8px;
+            overflow: hidden;
+          }
+
+          thead {
+            background: #f5f5f5;
+          }
+
+          th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+          }
+
+          th {
+            text-align: left;
+            font-weight: 600;
+            color: #444;
+          }
+
+          td {
+            vertical-align: top;
+          }
+
+          td:nth-child(2),
+          td:nth-child(3) {
+            text-align: center;
+          }
+
+          td:nth-child(4),
+          td:nth-child(5) {
+            text-align: right;
+          }
+
+          .totals {
+            margin-top: 30px;
+            text-align: right;
+            font-size: 15px;
+          }
+
+          .totals p {
+            margin: 5px 0;
+          }
+
+          .totals strong {
+            font-size: 16px;
+            color: #111;
+          }
+
+          /* 🔹 Estilos especiales para impresión a color */
+          @media print {
+            body {
+              background: #fafafa !important;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+
+            .info-section,
+            .status,
+            table th,
+            table td {
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>ORDEN DE COMPRA</h1>
+          <h2>#${props.order.id}</h2>
+        </div>
+
+        <div class="info-section">
+          <div class="info-row">
+            <strong>Estado:</strong>
+            <span class="status status-${props.order.status.toLowerCase()}">${getStatusText(props.order.status)}</span>
+          </div>
+          <div class="info-row">
+            <strong>Fecha de Orden:</strong>
+            <span>${orderDate}</span>
+          </div>
+          <div class="info-row">
+            <strong>Fecha Esperada:</strong>
+            <span>${expectedDate}</span>
+          </div>
+          <div class="info-row">
+            <strong>Proveedor:</strong>
+            <span>${props.order.supplier_name || 'Proveedor desconocido'}</span>
+          </div>
+          <div class="info-row">
+            <strong>Moneda:</strong>
+            <span>${props.order.currency_code}</span>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Producto</th>
+              <th>Cantidad</th>
+              <th>Unidad</th>
+              <th>Precio Unitario</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemsHtml}
+          </tbody>
+        </table>
+
+        <div class="totals">
+          <p><strong>Subtotal: ${formatCurrency(subtotal.value, props.order.currency_code)}</strong></p>
+          <p><strong>Total: ${formatCurrency(props.order.total_amount, props.order.currency_code)}</strong></p>
+        </div>
+      </body>
+    </html>
+  `
 }
 
 // Lifecycle

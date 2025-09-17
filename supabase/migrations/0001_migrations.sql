@@ -972,6 +972,7 @@ CREATE TABLE IF NOT EXISTS purchase_docs (
   total_usd numeric(18,6) null,
   total_clp numeric(18,6) null,
   status varchar(20) NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'RECEIVED', 'COMPLETED', 'CANCELLED')),
+  notes text,
   created_at timestamptz default now(),
   updated_at timestamptz default now(),
   deleted_at TIMESTAMPTZ,

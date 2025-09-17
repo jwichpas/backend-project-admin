@@ -411,7 +411,7 @@ const loadFromPurchaseOrder = async () => {
   try {
     // Load order items
     await purchasesStore.fetchPurchaseOrderItems(selectedPurchaseOrderId.value)
-    const orderItems = purchasesStore.getPurchaseOrderItems(selectedPurchaseOrderId.value)
+    const orderItems = purchasesStore.purchaseOrderItems.filter(item => item.purchase_order_id === selectedPurchaseOrderId.value)
     
     // Set form data
     form.value.purchase_order_id = order.id

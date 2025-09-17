@@ -157,14 +157,25 @@
                   >
                     <FileText class="h-4 w-4" />
                   </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    class="h-8 w-8" 
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    class="h-8 w-8"
                     @click="downloadXml(doc)"
+                    :disabled="!doc.greenter_xml"
                     title="Descargar XML"
                   >
                     <Download class="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    class="h-8 w-8"
+                    @click="downloadCdr(doc)"
+                    :disabled="!doc.greenter_cdr"
+                    title="Descargar CDR"
+                  >
+                    <FileText class="h-4 w-4 text-green-600" />
                   </Button>
                   <Button 
                     variant="ghost" 
@@ -182,6 +193,260 @@
         </Table>
       </CardContent>
     </Card>
+
+    <!-- Document Details Dialog -->
+    <Dialog v-model:open="showDocDetailDialog">
+      <DialogContent class="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Detalles del Documento</DialogTitle>
+        </DialogHeader>
+        <div v-if="selectedDoc" class="space-y-6">
+          <!-- Document Header -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6 p-4 bg-muted/50 rounded-lg">
+            <div class="space-y-3">
+              <div>
+                <label class="text-sm font-medium text-muted-foreground">Tipo de Documento</label>
+                <p class="text-lg font-semibold">{{ getDocTypeName(selectedDoc.doc_type) }}</p>
+              </div>
+              <div>
+                <label class="text-sm font-medium text-muted-foreground">Número</label>
+                <p class="text-lg font-mono">{{ selectedDoc.series }}-{{ String(selectedDoc.number).padStart(8, '0') }}</p>
+              </div>
+              <div>
+                <label class="text-sm font-medium text-muted-foreground">Fecha de Emisión</label>
+                <p>{{ formatDate(selectedDoc.issue_date) }}</p>
+              </div>
+              <div>
+                <label class="text-sm font-medium text-muted-foreground">Moneda</label>
+                <div class="flex items-center gap-2">
+                  <Badge variant="outline">{{ selectedDoc.currency_code }}</Badge>
+                  <span class="text-sm text-muted-foreground">T.C.: {{ selectedDoc.exchange_rate?.toFixed(3) || 'N/A' }}</span>
+                </div>
+              </div>
+            </div>
+            <div class="space-y-3">
+              <div>
+                <label class="text-sm font-medium text-muted-foreground">Cliente</label>
+                <p class="font-medium">{{ selectedDoc.parties?.fullname || selectedDoc.customer_name || 'Cliente general' }}</p>
+              </div>
+              <div>
+                <label class="text-sm font-medium text-muted-foreground">Sucursal</label>
+                <p class="text-sm">{{ selectedDoc.branches?.name || 'N/A' }}</p>
+              </div>
+              <div>
+                <label class="text-sm font-medium text-muted-foreground">Tipo de Operación</label>
+                <p class="text-sm font-mono">{{ selectedDoc.op_type_venta || 'N/A' }}</p>
+              </div>
+              <div>
+                <label class="text-sm font-medium text-muted-foreground">Afectación IGV</label>
+                <p class="text-sm font-mono">{{ selectedDoc.igv_affectation || 'N/A' }}</p>
+              </div>
+            </div>
+            <div class="space-y-3">
+              <div>
+                <label class="text-sm font-medium text-muted-foreground">Estado SUNAT</label>
+                <div class="flex items-center gap-2">
+                  <div :class="getSunatStatusColor(selectedDoc.greenter_status)" class="h-3 w-3 rounded-full"></div>
+                  <span class="font-medium">{{ getSunatStatusName(selectedDoc.greenter_status) }}</span>
+                </div>
+              </div>
+              <div>
+                <label class="text-sm font-medium text-muted-foreground">Total Principal</label>
+                <p class="text-xl font-bold">{{ formatCurrency(selectedDoc.total_local || selectedDoc.total, 'PEN') }}</p>
+              </div>
+              <div v-if="selectedDoc.total_usd" class="text-sm">
+                <span class="text-muted-foreground">USD: </span>
+                <span class="font-medium">{{ formatCurrency(selectedDoc.total_usd, 'USD') }}</span>
+              </div>
+              <div v-if="selectedDoc.total_clp" class="text-sm">
+                <span class="text-muted-foreground">CLP: </span>
+                <span class="font-medium">{{ formatCurrency(selectedDoc.total_clp, 'CLP') }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Document Actions -->
+          <div class="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              @click="downloadXml(selectedDoc)"
+              :disabled="!selectedDoc.greenter_xml"
+            >
+              <Download class="mr-2 h-4 w-4" />
+              Descargar XML
+            </Button>
+            <Button
+              variant="outline"
+              @click="downloadCdr(selectedDoc)"
+              :disabled="!selectedDoc.greenter_cdr"
+            >
+              <Download class="mr-2 h-4 w-4" />
+              Descargar CDR
+            </Button>
+            <Button
+              variant="outline"
+              @click="downloadPdf(selectedDoc)"
+            >
+              <FileText class="mr-2 h-4 w-4" />
+              Descargar PDF
+            </Button>
+          </div>
+
+          <!-- Financial Details -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="space-y-3">
+              <h4 class="font-semibold flex items-center gap-2">
+                <Receipt class="h-4 w-4" />
+                Operaciones Gravadas
+              </h4>
+              <div class="space-y-2 text-sm">
+                <div class="flex justify-between">
+                  <span class="text-muted-foreground">Local (PEN):</span>
+                  <span class="font-medium">{{ formatCurrency(selectedDoc.total_ope_gravadas_local || 0, 'PEN') }}</span>
+                </div>
+                <div v-if="selectedDoc.total_ope_gravadas_usd" class="flex justify-between">
+                  <span class="text-muted-foreground">USD:</span>
+                  <span>{{ formatCurrency(selectedDoc.total_ope_gravadas_usd, 'USD') }}</span>
+                </div>
+                <div v-if="selectedDoc.total_ope_gravadas_clp" class="flex justify-between">
+                  <span class="text-muted-foreground">CLP:</span>
+                  <span>{{ formatCurrency(selectedDoc.total_ope_gravadas_clp, 'CLP') }}</span>
+                </div>
+              </div>
+
+              <h5 class="font-medium text-sm mt-4">Otras Operaciones</h5>
+              <div class="space-y-1 text-xs">
+                <div class="flex justify-between">
+                  <span class="text-muted-foreground">Exoneradas:</span>
+                  <span>{{ formatCurrency(selectedDoc.total_ope_exoneradas_local || 0, 'PEN') }}</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-muted-foreground">Inafectas:</span>
+                  <span>{{ formatCurrency(selectedDoc.total_ope_inafectas_local || 0, 'PEN') }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="space-y-3">
+              <h4 class="font-semibold flex items-center gap-2">
+                <Calculator class="h-4 w-4" />
+                Impuestos y Cargos
+              </h4>
+              <div class="space-y-2 text-sm">
+                <div class="flex justify-between">
+                  <span class="text-muted-foreground">IGV (PEN):</span>
+                  <span class="font-medium">{{ formatCurrency(selectedDoc.total_igv_local || 0, 'PEN') }}</span>
+                </div>
+                <div v-if="selectedDoc.total_igv_usd" class="flex justify-between">
+                  <span class="text-muted-foreground">IGV (USD):</span>
+                  <span>{{ formatCurrency(selectedDoc.total_igv_usd, 'USD') }}</span>
+                </div>
+                <div v-if="selectedDoc.total_igv_clp" class="flex justify-between">
+                  <span class="text-muted-foreground">IGV (CLP):</span>
+                  <span>{{ formatCurrency(selectedDoc.total_igv_clp, 'CLP') }}</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-muted-foreground">ISC:</span>
+                  <span>{{ formatCurrency(selectedDoc.total_isc || 0, 'PEN') }}</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-muted-foreground">Descuentos:</span>
+                  <span>{{ formatCurrency(selectedDoc.total_descuentos || 0, 'PEN') }}</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-muted-foreground">Otros Cargos:</span>
+                  <span>{{ formatCurrency(selectedDoc.total_otros_cargos || 0, 'PEN') }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="space-y-3">
+              <h4 class="font-semibold flex items-center gap-2">
+                <Shield class="h-4 w-4" />
+                Estado SUNAT
+              </h4>
+              <div class="space-y-2 text-sm">
+                <div class="flex justify-between">
+                  <span class="text-muted-foreground">Hash:</span>
+                  <span class="font-mono text-xs break-all">{{ selectedDoc.greenter_hash || 'N/A' }}</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-muted-foreground">Ticket:</span>
+                  <span class="font-mono text-xs">{{ selectedDoc.greenter_ticket || 'N/A' }}</span>
+                </div>
+                <div v-if="selectedDoc.error_message" class="mt-2 p-2 bg-muted rounded">
+                  <span class="text-xs font-medium">Mensaje SUNAT:</span>
+                  <p class="text-xs mt-1">{{ selectedDoc.error_message }}</p>
+                </div>
+              </div>
+
+              <h5 class="font-medium text-sm mt-4">Auditoría</h5>
+              <div class="space-y-1 text-xs">
+                <div class="flex justify-between">
+                  <span class="text-muted-foreground">Creado:</span>
+                  <span>{{ formatDateTime(selectedDoc.created_at) }}</span>
+                </div>
+                <div v-if="selectedDoc.updated_at !== selectedDoc.created_at" class="flex justify-between">
+                  <span class="text-muted-foreground">Actualizado:</span>
+                  <span>{{ formatDateTime(selectedDoc.updated_at) }}</span>
+                </div>
+                <div v-if="selectedDoc.notes" class="mt-2 p-2 bg-muted rounded">
+                  <span class="text-xs font-medium">Notas:</span>
+                  <p class="text-xs mt-1">{{ selectedDoc.notes }}</p>
+                </div>
+                <div v-if="selectedDoc.observations" class="mt-2 p-2 bg-muted rounded">
+                  <span class="text-xs font-medium">Observaciones:</span>
+                  <p class="text-xs mt-1">{{ selectedDoc.observations }}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex justify-end gap-2 pt-4 border-t">
+            <Button variant="outline" @click="showDocDetailDialog = false">
+              Cerrar
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Document Actions Dialog -->
+    <Dialog v-model:open="showActionsDialog">
+      <DialogContent class="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Acciones del Documento</DialogTitle>
+        </DialogHeader>
+        <div v-if="selectedDoc" class="space-y-4">
+          <div class="text-center text-sm text-muted-foreground">
+            {{ getDocTypeName(selectedDoc.doc_type) }} {{ selectedDoc.series }}-{{ String(selectedDoc.number).padStart(8, '0') }}
+          </div>
+          <div class="grid gap-2">
+            <Button variant="outline" class="w-full justify-start" @click="viewDoc(selectedDoc); showActionsDialog = false">
+              <Eye class="mr-2 h-4 w-4" />
+              Ver Detalles
+            </Button>
+            <Button variant="outline" class="w-full justify-start" @click="downloadXml(selectedDoc)" :disabled="!selectedDoc.greenter_xml">
+              <Download class="mr-2 h-4 w-4" />
+              Descargar XML
+            </Button>
+            <Button variant="outline" class="w-full justify-start" @click="downloadCdr(selectedDoc)" :disabled="!selectedDoc.greenter_cdr">
+              <Download class="mr-2 h-4 w-4" />
+              Descargar CDR
+            </Button>
+            <Button variant="outline" class="w-full justify-start" @click="downloadPdf(selectedDoc)">
+              <FileText class="mr-2 h-4 w-4" />
+              Descargar PDF
+            </Button>
+          </div>
+          <div class="flex justify-end gap-2 pt-4 border-t">
+            <Button variant="outline" @click="showActionsDialog = false">
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
 
     <!-- Create Document Dialog -->
     <Dialog v-model:open="showCreateDocDialog">
@@ -221,7 +486,9 @@ import {
   User,
   Eye,
   MoreVertical,
-  Loader2
+  Loader2,
+  Calculator,
+  Shield
 } from 'lucide-vue-next'
 
 // UI Components
@@ -247,6 +514,9 @@ const salesStore = useSalesStore()
 
 // State
 const showCreateDocDialog = ref(false)
+const showDocDetailDialog = ref(false)
+const showActionsDialog = ref(false)
+const selectedDoc = ref<any>(null)
 
 // Computed
 const filteredDocs = computed(() => salesStore.activeSalesDocs)
@@ -286,8 +556,21 @@ const formatDateTime = (dateString: string) => {
 }
 
 const formatCurrency = (amount: number, currency: string) => {
-  const symbol = currency === 'PEN' ? 'S/' : '$'
-  return `${symbol} ${amount.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const symbols: Record<string, string> = {
+    'PEN': 'S/',
+    'USD': '$',
+    'CLP': '$',
+    'EUR': '€'
+  }
+  const symbol = symbols[currency] || currency
+
+  // Format with appropriate decimal places based on currency
+  const decimals = currency === 'CLP' ? 0 : 2
+
+  return `${symbol} ${amount.toLocaleString('es-PE', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals
+  })}`
 }
 
 const getDocTypeName = (type: string) => {
@@ -322,23 +605,86 @@ const getSunatStatusName = (status: string) => {
 
 const viewDoc = (doc: any) => {
   salesStore.selectSalesDoc(doc)
-  // TODO: Show document details dialog
-  console.log('View document:', doc)
+  selectedDoc.value = doc
+  showDocDetailDialog.value = true
 }
 
-const downloadPdf = (doc: any) => {
-  // TODO: Download PDF
-  console.log('Download PDF for document:', doc)
+const downloadPdf = async (doc: any) => {
+  try {
+    // Generate PDF from document data (implement PDF generation logic)
+    console.log('PDF generation not implemented yet for document:', doc)
+    // TODO: Implement PDF generation using jsPDF or similar
+  } catch (error) {
+    console.error('Error downloading PDF:', error)
+  }
 }
 
-const downloadXml = (doc: any) => {
-  // TODO: Download XML
-  console.log('Download XML for document:', doc)
+// Helper function to decode hex-encoded URLs
+const decodeHexUrl = (hexString: string): string => {
+  if (!hexString) return ''
+  try {
+    // Remove '\x' prefix if present and convert hex to string
+    const cleanHex = hexString.replace(/\\x/g, '')
+    const bytes = []
+    for (let i = 0; i < cleanHex.length; i += 2) {
+      bytes.push(parseInt(cleanHex.substr(i, 2), 16))
+    }
+    return String.fromCharCode.apply(null, bytes)
+  } catch (error) {
+    console.error('Error decoding hex URL:', error)
+    return hexString // Return original if decode fails
+  }
+}
+
+const downloadXml = async (doc: any) => {
+  try {
+    if (!doc.greenter_xml) {
+      console.warn('No XML file available for this document')
+      return
+    }
+
+    // Decode the hex-encoded URL
+    const xmlUrl = decodeHexUrl(doc.greenter_xml)
+
+    // Create a temporary link to download the XML from Supabase Storage
+    const link = document.createElement('a')
+    link.href = xmlUrl
+    link.download = `${doc.doc_type}-${doc.series}-${String(doc.number).padStart(8, '0')}.xml`
+    link.target = '_blank'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  } catch (error) {
+    console.error('Error downloading XML:', error)
+  }
+}
+
+const downloadCdr = async (doc: any) => {
+  try {
+    if (!doc.greenter_cdr) {
+      console.warn('No CDR file available for this document')
+      return
+    }
+
+    // Decode the hex-encoded URL
+    const cdrUrl = decodeHexUrl(doc.greenter_cdr)
+
+    // Create a temporary link to download the CDR ZIP from Supabase Storage
+    const link = document.createElement('a')
+    link.href = cdrUrl
+    link.download = `${doc.doc_type}-${doc.series}-${String(doc.number).padStart(8, '0')}-cdr.zip`
+    link.target = '_blank'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  } catch (error) {
+    console.error('Error downloading CDR:', error)
+  }
 }
 
 const showDocActions = (doc: any) => {
-  // TODO: Show context menu with actions
-  console.log('Show actions for document:', doc)
+  selectedDoc.value = doc
+  showActionsDialog.value = true
 }
 
 const exportDocs = () => {

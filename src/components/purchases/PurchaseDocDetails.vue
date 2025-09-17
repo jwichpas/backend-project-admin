@@ -254,12 +254,12 @@ const purchasesStore = usePurchasesStore()
 const loading = ref(false)
 
 // Computed
-const docItems = computed(() => 
-  purchasesStore.getPurchaseDocItems(props.doc.id)
+const docItems = computed(() =>
+  purchasesStore.purchaseDocItems.filter(item => item.purchase_doc_id === props.doc.id)
 )
 
-const additionalCosts = computed(() => 
-  purchasesStore.getAdditionalCosts(props.doc.id)
+const additionalCosts = computed(() =>
+  purchasesStore.additionalCosts.filter(cost => cost.purchase_doc_id === props.doc.id)
 )
 
 // Methods
@@ -313,10 +313,271 @@ const refreshItems = async () => {
   }
 }
 
-const printDocument = () => {
-  // TODO: Implement print functionality
-  console.log('Print document:', props.doc)
-  // This could open a print-friendly version or generate a PDF
+const printDocument = async () => {
+  try {
+    // Create PDF content
+    const pdfContent = generateDocumentPDFContent()
+
+    // Create and download PDF
+    const link = document.createElement('a')
+    const blob = new Blob([pdfContent], { type: 'text/html' })
+    const url = URL.createObjectURL(blob)
+
+    // Open in new window for printing
+    const printWindow = window.open(url, '_blank')
+    if (printWindow) {
+      printWindow.onload = () => {
+        printWindow.print()
+      }
+    }
+
+    // Clean up
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  } catch (error) {
+    console.error('Error printing document:', error)
+  }
+}
+
+const generateDocumentPDFContent = (): string => {
+  const issueDate = formatDate(props.doc.issue_date)
+  const arrivalDate = props.doc.arrival_date ? formatDate(props.doc.arrival_date) : 'No definida'
+
+  const itemsHtml = docItems.value.map(item => `
+    <tr>
+      <td>${item.description || 'Producto'}</td>
+      <td>${item.quantity}</td>
+      <td>${item.unit_code}</td>
+      <td>${formatCurrency(item.unit_cost, props.doc.currency_code)}</td>
+      <td>${formatCurrency(item.quantity * item.unit_cost, props.doc.currency_code)}</td>
+    </tr>
+  `).join('')
+
+  const docTypeTitle = props.doc.doc_type === '01' ? 'FACTURA' :
+                      props.doc.doc_type === '03' ? 'BOLETA DE VENTA' :
+                      props.doc.doc_type === '07' ? 'NOTA DE CRÉDITO' :
+                      props.doc.doc_type === '08' ? 'NOTA DE DÉBITO' : 'DOCUMENTO'
+
+  return `
+    <!DOCTYPE html>
+    <html lang="es">
+      <head>
+        <meta charset="utf-8">
+        <title>Documento de Compra - ${props.doc.series}-${props.doc.number}</title>
+        <style>
+          body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            margin: 40px;
+            color: #333;
+            background: #fafafa;
+          }
+
+          .header {
+            text-align: center;
+            margin-bottom: 40px;
+          }
+
+          .header h1 {
+            margin: 0;
+            font-size: 28px;
+            color: #111;
+            letter-spacing: 1px;
+          }
+
+          .header h2 {
+            margin: 5px 0 0;
+            font-size: 16px;
+            color: #555;
+            font-weight: normal;
+          }
+
+          .info-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+          }
+
+          .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 14px;
+          }
+
+          .info-row strong {
+            color: #444;
+          }
+
+          .status {
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: bold;
+            text-transform: uppercase;
+          }
+
+          .status-pending { background: #fef3c7; color: #92400e; }
+          .status-approved { background: #d1fae5; color: #065f46; }
+          .status-completed { background: #dbeafe; color: #1e40af; }
+          .status-cancelled { background: #f3f4f6; color: #374151; }
+
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            font-size: 14px;
+            background: #fff;
+            border-radius: 8px;
+            overflow: hidden;
+          }
+
+          thead {
+            background: #f5f5f5;
+          }
+
+          th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+          }
+
+          th {
+            text-align: left;
+            font-weight: 600;
+            color: #444;
+          }
+
+          td {
+            vertical-align: top;
+          }
+
+          td:nth-child(2),
+          td:nth-child(3) {
+            text-align: center;
+          }
+
+          td:nth-child(4),
+          td:nth-child(5) {
+            text-align: right;
+          }
+
+          .totals {
+            margin-top: 30px;
+            text-align: right;
+            font-size: 15px;
+          }
+
+          .totals p {
+            margin: 5px 0;
+          }
+
+          .totals strong {
+            font-size: 16px;
+            color: #111;
+          }
+
+          .totals-section {
+            background: #fff;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            margin-top: 20px;
+          }
+
+          /* 🔹 Estilos especiales para impresión a color */
+          @media print {
+            body {
+              background: #fafafa !important;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+
+            .info-section,
+            .status,
+            table th,
+            table td,
+            .totals-section {
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>${docTypeTitle}</h1>
+          <h2>${props.doc.series}-${props.doc.number}</h2>
+        </div>
+
+        <div class="info-section">
+          <div class="info-row">
+            <strong>Estado:</strong>
+            <span class="status status-${props.doc.status.toLowerCase()}">${props.doc.status}</span>
+          </div>
+          <div class="info-row">
+            <strong>Fecha de Emisión:</strong>
+            <span>${issueDate}</span>
+          </div>
+          <div class="info-row">
+            <strong>Fecha de Llegada:</strong>
+            <span>${arrivalDate}</span>
+          </div>
+          <div class="info-row">
+            <strong>Proveedor:</strong>
+            <span>${props.doc.supplier_name || 'No especificado'}</span>
+          </div>
+          <div class="info-row">
+            <strong>Moneda:</strong>
+            <span>${props.doc.currency_code}</span>
+          </div>
+          ${props.doc.exchange_rate && props.doc.exchange_rate !== 1 ? `
+          <div class="info-row">
+            <strong>Tipo de Cambio:</strong>
+            <span>${props.doc.exchange_rate.toFixed(6)}</span>
+          </div>
+          ` : ''}
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Descripción</th>
+              <th>Cantidad</th>
+              <th>Unidad</th>
+              <th>Precio Unitario</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemsHtml}
+          </tbody>
+        </table>
+
+        <div class="totals-section">
+          <div class="totals">
+            <p><strong>Operaciones Gravadas: ${formatCurrency(props.doc.total_ope_gravadas, props.doc.currency_code)}</strong></p>
+            <p><strong>Operaciones Exoneradas: ${formatCurrency(props.doc.total_ope_exoneradas, props.doc.currency_code)}</strong></p>
+            <p><strong>Operaciones Inafectas: ${formatCurrency(props.doc.total_ope_inafectas, props.doc.currency_code)}</strong></p>
+            <p><strong>IGV: ${formatCurrency(props.doc.total_igv, props.doc.currency_code)}</strong></p>
+            <p style="font-size: 18px; margin-top: 15px; border-top: 2px solid #ddd; padding-top: 10px;">
+              <strong>TOTAL: ${formatCurrency(props.doc.total, props.doc.currency_code)}</strong>
+            </p>
+            ${props.doc.currency_code !== 'PEN' && props.doc.total_local ? `
+            <p style="color: #666; font-size: 14px;">
+              <strong>Total en Soles: ${formatCurrency(props.doc.total_local, 'PEN')}</strong>
+            </p>
+            ` : ''}
+          </div>
+          ${props.doc.notes ? `
+          <div style="margin-top: 20px; text-align: left;">
+            <strong>Observaciones:</strong>
+            <p style="margin-top: 5px; font-style: italic;">${props.doc.notes}</p>
+          </div>
+          ` : ''}
+        </div>
+      </body>
+    </html>
+  `
 }
 
 // Lifecycle
