@@ -12,6 +12,10 @@ CREATE TABLE IF NOT EXISTS routes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
     vehicle_id UUID NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
+    driver_id UUID REFERENCES drivers(id),
+
+    estimated_fuel_consumption NUMERIC(8,2),
+    actual_fuel_consumption NUMERIC(8,2),
     
     -- Información básica de la ruta
     route_name TEXT,
@@ -74,6 +78,11 @@ CREATE TABLE IF NOT EXISTS routes (
     created_by UUID REFERENCES auth.users(id),
     updated_by UUID REFERENCES auth.users(id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_routes_driver ON routes(driver_id, planned_start_time);
+CREATE INDEX IF NOT EXISTS idx_routes_vehicle ON routes(vehicle_id, planned_start_time);
+CREATE INDEX IF NOT EXISTS idx_routes_status_date ON routes(status, planned_start_time);
+
 CREATE TABLE IF NOT EXISTS device_locations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,

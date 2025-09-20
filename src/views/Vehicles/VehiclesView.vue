@@ -278,19 +278,51 @@
 
           <div v-if="!vehicleForm.own">
             <label class="text-sm font-medium">Proveedor</label>
-            <select
-              v-model="vehicleForm.provider_party_id"
-              class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <option value="">Seleccionar proveedor</option>
-              <option
-                v-for="supplier in suppliers"
-                :key="supplier.id"
-                :value="supplier.id"
+            <div class="relative">
+              <Input
+                v-model="supplierSearchQuery"
+                placeholder="Buscar proveedor por nombre o documento..."
+                @input="filterSuppliers"
+                @focus="showSupplierDropdown = true"
+                class="pr-10"
+              />
+              <Search class="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+
+              <!-- Dropdown de resultados -->
+              <div
+                v-if="showSupplierDropdown && filteredSuppliers.length > 0"
+                class="absolute z-50 w-full mt-1 bg-background border border-border rounded-md shadow-lg max-h-60 overflow-y-auto"
               >
-                {{ supplier.fullname }} - {{ supplier.doc_number }}
-              </option>
-            </select>
+                <div
+                  v-for="supplier in filteredSuppliers.slice(0, 10)"
+                  :key="supplier.id"
+                  @click="selectSupplier(supplier)"
+                  class="p-3 hover:bg-muted cursor-pointer border-b border-border last:border-b-0"
+                >
+                  <div class="font-medium">{{ supplier.name || supplier.fullname }}</div>
+                  <div class="text-sm text-muted-foreground">{{ supplier.doc_type }} {{ supplier.doc_number }}</div>
+                  <div v-if="supplier.email" class="text-xs text-muted-foreground">{{ supplier.email }}</div>
+                </div>
+              </div>
+
+              <!-- Proveedor seleccionado -->
+              <div v-if="selectedSupplier" class="mt-2 p-3 bg-muted rounded-md border border-border">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <div class="font-medium">{{ selectedSupplier.name || selectedSupplier.fullname }}</div>
+                    <div class="text-sm text-muted-foreground">{{ selectedSupplier.doc_type }} {{ selectedSupplier.doc_number }}</div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    @click="clearSupplierSelection"
+                    class="text-red-600 hover:text-red-700"
+                  >
+                    ✕
+                  </Button>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div class="grid grid-cols-2 gap-4">
@@ -465,7 +497,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useCompaniesStore } from '@/stores/companies'
 import { useSalesStore } from '@/stores/sales'
 import { useVehicles, type Vehicle, type CreateVehicleData, type UpdateVehicleData } from '@/composables/useVehicles'
@@ -527,9 +559,13 @@ const realtimeEnabled = ref(false)
 const realtimeInterval = ref<NodeJS.Timeout | null>(null)
 
 // Suppliers for third-party vehicles
-const suppliers = computed(() => 
-  salesStore.activeCustomers?.filter(customer => customer.is_supplier) || []
-)
+const suppliers = computed(() => salesStore.activeSuppliers || [])
+
+// Supplier search functionality
+const supplierSearchQuery = ref('')
+const showSupplierDropdown = ref(false)
+const filteredSuppliers = ref<any[]>([])
+const selectedSupplier = ref<any>(null)
 
 // Vehicle form
 const vehicleForm = ref<CreateVehicleData>({
@@ -582,7 +618,7 @@ const refreshData = async () => {
   await Promise.all([
     fetchVehicles(companiesStore.currentCompany.id),
     fetchVehicleStatuses(companiesStore.currentCompany.id),
-    salesStore.fetchCustomers(companiesStore.currentCompany.id)
+    salesStore.fetchSuppliers(companiesStore.currentCompany.id)
   ])
 }
 
@@ -597,6 +633,11 @@ const openCreateDialog = () => {
     own: true,
     capacity_kg: null
   }
+  // Reset supplier selection
+  supplierSearchQuery.value = ''
+  selectedSupplier.value = null
+  showSupplierDropdown.value = false
+  filteredSuppliers.value = []
   showVehicleDialog.value = true
 }
 
@@ -611,6 +652,18 @@ const editVehicle = (vehicle: Vehicle) => {
     own: vehicle.own,
     capacity_kg: vehicle.capacity_kg
   }
+  // Set selected supplier if editing third-party vehicle
+  if (!vehicle.own && vehicle.provider_party_id) {
+    const supplier = suppliers.value.find(s => s.id === vehicle.provider_party_id)
+    if (supplier) {
+      selectedSupplier.value = supplier
+      supplierSearchQuery.value = `${supplier.name || supplier.fullname} - ${supplier.doc_number}`
+    }
+  } else {
+    selectedSupplier.value = null
+    supplierSearchQuery.value = ''
+  }
+  showSupplierDropdown.value = false
   showVehicleDialog.value = true
 }
 
@@ -681,6 +734,45 @@ const toggleRealtimeTracking = () => {
   }
 }
 
+// Supplier search functions
+const filterSuppliers = () => {
+  if (!supplierSearchQuery.value || supplierSearchQuery.value.length < 2) {
+    filteredSuppliers.value = []
+    return
+  }
+
+  const query = supplierSearchQuery.value.toLowerCase()
+  filteredSuppliers.value = suppliers.value.filter(supplier =>
+    (supplier.name || supplier.fullname || '').toLowerCase().includes(query) ||
+    (supplier.doc_number || '').toLowerCase().includes(query) ||
+    (supplier.razon_social || '').toLowerCase().includes(query)
+  )
+}
+
+const selectSupplier = (supplier: any) => {
+  selectedSupplier.value = supplier
+  vehicleForm.value.provider_party_id = supplier.id
+  supplierSearchQuery.value = `${supplier.name || supplier.fullname} - ${supplier.doc_number}`
+  showSupplierDropdown.value = false
+  filteredSuppliers.value = []
+}
+
+const clearSupplierSelection = () => {
+  selectedSupplier.value = null
+  vehicleForm.value.provider_party_id = null
+  supplierSearchQuery.value = ''
+  showSupplierDropdown.value = false
+  filteredSuppliers.value = []
+}
+
+// Close dropdown when clicking outside
+const handleClickOutside = (event: Event) => {
+  const target = event.target as HTMLElement
+  if (!target.closest('.relative')) {
+    showSupplierDropdown.value = false
+  }
+}
+
 // Helper functions
 const getStatusColor = (status?: string) => {
   switch (status) {
@@ -730,11 +822,35 @@ const formatDate = (dateString: string) => {
 // Lifecycle
 onMounted(async () => {
   await refreshData()
+  document.addEventListener('click', handleClickOutside)
 })
 
 onUnmounted(() => {
   if (realtimeInterval.value) {
     clearInterval(realtimeInterval.value)
   }
+  document.removeEventListener('click', handleClickOutside)
 })
+
+// Watch for company changes
+watch(
+  () => companiesStore.currentCompany,
+  async (newCompany, oldCompany) => {
+    if (newCompany && oldCompany && newCompany.id !== oldCompany.id) {
+      console.log('Company changed in VehiclesView, reloading data...', {
+        from: oldCompany.id,
+        to: newCompany.id
+      })
+      await refreshData()
+
+      // Restart realtime tracking if it was enabled
+      if (realtimeEnabled.value) {
+        toggleRealtimeTracking() // Disable
+        setTimeout(() => {
+          toggleRealtimeTracking() // Re-enable with new company
+        }, 100)
+      }
+    }
+  }, { deep: true }
+)
 </script>

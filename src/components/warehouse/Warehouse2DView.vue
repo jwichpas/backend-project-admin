@@ -947,7 +947,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed, nextTick, watch } from 'vue'
 import {
   Tag, RotateCcw, X, Grid, Plus, Minus, TrendingUp, Edit, Square, Box, Move, Trash2, Copy
 } from 'lucide-vue-next'
@@ -1067,10 +1067,10 @@ const viewBox = ref({
 })
 
 // Constants
-const warehouseMargin = 80
-const zoomFactor = 0.15
-const minZoom = 0.2
-const maxZoom = 8
+const warehouseMargin = 200  // Incrementado de 80 a 200 para mejor espaciado
+const zoomFactor = 0.2       // Incrementado de 0.15 a 0.2 para zoom más suave
+const minZoom = 0.1          // Reducido de 0.2 a 0.1 para más zoom out
+const maxZoom = 12           // Incrementado de 8 a 12 para más zoom in
 
 // Computed Properties
 const bounds = computed(() => {
@@ -1079,18 +1079,24 @@ const bounds = computed(() => {
   }
 
   const warehouse = props.warehouseData.warehouse
+
+  // Aplicar factores de escala para mejor visualización
+  const scaleFactor = 1.5 // Factor para hacer el layout más espacioso
+
   return {
-    width: Math.max(warehouse.width || 1200, 600),
+    width: Math.max((warehouse.width || 1200) * scaleFactor, 800),
     height: warehouse.height || 80,
-    length: Math.max(warehouse.length || 900, 500)
+    length: Math.max((warehouse.length || 900) * scaleFactor, 600)
   }
 })
 
 // Zone Helper Functions
-const getZoneX = (zone: WarehouseZone) => (zone.x_coordinate || 0) + warehouseMargin
-const getZoneY = (zone: WarehouseZone) => (zone.y_coordinate || 0) + warehouseMargin
-const getZoneWidth = (zone: WarehouseZone) => Math.max(30, zone.width || 200)
-const getZoneHeight = (zone: WarehouseZone) => Math.max(30, zone.length || 150)
+// Zone Helper Functions (con factor de escala aplicado)
+const coordinateScaleFactor = 1.5
+const getZoneX = (zone: WarehouseZone) => ((zone.x_coordinate || 0) * coordinateScaleFactor) + warehouseMargin
+const getZoneY = (zone: WarehouseZone) => ((zone.y_coordinate || 0) * coordinateScaleFactor) + warehouseMargin
+const getZoneWidth = (zone: WarehouseZone) => Math.max(45, (zone.width || 200) * coordinateScaleFactor)
+const getZoneHeight = (zone: WarehouseZone) => Math.max(45, (zone.length || 150) * coordinateScaleFactor)
 
 const getZoneColor = (zone: WarehouseZone) => {
   return zone.color_hex || '#10b981'
@@ -1100,21 +1106,21 @@ const getZoneProductCount = (zone: WarehouseZone) => {
   return props.filteredLocations.filter(loc => loc.warehouse_zone_id === zone.id).length
 }
 
-// Aisle Helper Functions
-const getAisleX = (aisle: WarehouseAisle) => (aisle.start_x || 0) + warehouseMargin
-const getAisleY = (aisle: WarehouseAisle) => (aisle.start_y || 0) + warehouseMargin
-const getAisleWidth = (aisle: WarehouseAisle) => Math.max(10, aisle.width || 30)
-const getAisleLength = (aisle: WarehouseAisle) => Math.max(20, Math.abs((aisle.end_y || 20) - (aisle.start_y || 0)))
+// Aisle Helper Functions (con factor de escala aplicado)
+const getAisleX = (aisle: WarehouseAisle) => ((aisle.start_x || 0) * coordinateScaleFactor) + warehouseMargin
+const getAisleY = (aisle: WarehouseAisle) => ((aisle.start_y || 0) * coordinateScaleFactor) + warehouseMargin
+const getAisleWidth = (aisle: WarehouseAisle) => Math.max(15, (aisle.width || 30) * coordinateScaleFactor)
+const getAisleLength = (aisle: WarehouseAisle) => Math.max(30, Math.abs(((aisle.end_y || 20) - (aisle.start_y || 0)) * coordinateScaleFactor))
 
-// Shelf Helper Functions
-const getShelfX = (shelf: WarehouseShelf) => (shelf.position_x || 0) + warehouseMargin
-const getShelfY = (shelf: WarehouseShelf) => (shelf.position_y || 0) + warehouseMargin
-const getShelfWidth = (shelf: WarehouseShelf) => Math.max(5, shelf.width || 15)
-const getShelfDepth = (shelf: WarehouseShelf) => Math.max(5, shelf.depth || 8)
+// Shelf Helper Functions (con factor de escala aplicado)
+const getShelfX = (shelf: WarehouseShelf) => ((shelf.position_x || 0) * coordinateScaleFactor) + warehouseMargin
+const getShelfY = (shelf: WarehouseShelf) => ((shelf.position_y || 0) * coordinateScaleFactor) + warehouseMargin
+const getShelfWidth = (shelf: WarehouseShelf) => Math.max(8, (shelf.width || 15) * coordinateScaleFactor)
+const getShelfDepth = (shelf: WarehouseShelf) => Math.max(8, (shelf.depth || 8) * coordinateScaleFactor)
 
-// Location Helper Functions
-const getLocationX = (location: ProductLocationDetailed) => (location.final_x || location.position_x || 0) + warehouseMargin
-const getLocationY = (location: ProductLocationDetailed) => (location.final_y || location.position_y || 0) + warehouseMargin
+// Location Helper Functions (con factor de escala aplicado)
+const getLocationX = (location: ProductLocationDetailed) => ((location.final_x || location.position_x || 0) * coordinateScaleFactor) + warehouseMargin
+const getLocationY = (location: ProductLocationDetailed) => ((location.final_y || location.position_y || 0) * coordinateScaleFactor) + warehouseMargin
 
 const getLocationRadius = (location: ProductLocationDetailed) => {
   const stock = location.stock_actual || 0
@@ -1278,11 +1284,14 @@ const resetView = () => {
   const baseWidth = bounds.value.width + warehouseMargin * 2
   const baseHeight = bounds.value.length + warehouseMargin * 2
 
+  // Zoom inicial al 80% para mejor visualización profesional
+  const professionalZoom = 0.8
+
   viewBox.value = {
     x: 0,
     y: 0,
-    width: baseWidth,
-    height: baseHeight
+    width: baseWidth / professionalZoom,
+    height: baseHeight / professionalZoom
   }
 
   selectedZone.value = null
@@ -2134,6 +2143,26 @@ const updateWarehouseSize = async (warehouse: Warehouse, newSize: { width: numbe
     console.error('Error updating warehouse size:', error)
   }
 }
+
+// Auto-zoom cuando cambian los datos del almacén para mejor UX profesional
+watch(() => props.warehouseData, async (newData) => {
+  if (newData && newData.warehouse) {
+    await nextTick()
+    // Calcular zoom inicial más apropiado basado en el contenido
+    const contentWidth = bounds.value.width + warehouseMargin * 2
+    const contentHeight = bounds.value.length + warehouseMargin * 2
+
+    // Ajustar zoom inicial al 70% para dar más espacio visual
+    const initialZoom = 0.7
+
+    viewBox.value = {
+      x: 0,
+      y: 0,
+      width: contentWidth / initialZoom,
+      height: contentHeight / initialZoom
+    }
+  }
+}, { immediate: true })
 
 </script>
 

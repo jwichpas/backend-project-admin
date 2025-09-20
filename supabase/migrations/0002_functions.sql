@@ -106,6 +106,33 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Función para obtener el siguiente número de serie automáticamente
+CREATE OR REPLACE FUNCTION get_next_document_number(
+    p_company_id UUID,
+    p_document_type VARCHAR(4),
+    p_series VARCHAR(4)
+) RETURNS BIGINT AS $$
+DECLARE
+    v_next_number BIGINT;
+BEGIN
+    -- Bloquear la fila para evitar condiciones de carrera
+    PERFORM 1 FROM document_counters 
+    WHERE company_id = p_company_id 
+    AND document_type_code = p_document_type 
+    AND series = p_series 
+    FOR UPDATE;
+    
+    -- Obtener o crear el contador
+    INSERT INTO document_counters (company_id, document_type_code, series, last_number)
+    VALUES (p_company_id, p_document_type, p_series, 1)
+    ON CONFLICT (company_id, document_type_code, series) 
+    DO UPDATE SET last_number = document_counters.last_number + 1
+    RETURNING last_number INTO v_next_number;
+    
+    RETURN v_next_number;
+END;
+$$ LANGUAGE plpgsql;
+
 -- PASO 21: FUNCIONES DE APLICACIÓN Y HELPERS (FUSIONADO)
 -- ============================================================================
 
@@ -1907,3 +1934,128 @@ BEGIN
 END;
 $$;
 
+-- Función para obtener stock actual por producto y almacén
+CREATE OR REPLACE FUNCTION get_current_stock(p_product_id UUID, p_warehouse_id UUID)
+RETURNS TABLE(
+    product_id UUID,
+    warehouse_id UUID,
+    current_stock NUMERIC(18,6),
+    reserved_stock NUMERIC(18,6),
+    available_stock NUMERIC(18,6)
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        sl.product_id,
+        sl.warehouse_id,
+        SUM(sl.qty_in - sl.qty_out) as current_stock,
+        COALESCE((
+            SELECT SUM(sdi.quantity) 
+            FROM sales_doc_items sdi
+            JOIN sales_docs sd ON sd.id = sdi.sales_doc_id
+            WHERE sdi.product_id = p_product_id 
+            AND sd.status NOT IN ('CANCELLED', 'COMPLETED')
+        ), 0) as reserved_stock,
+        SUM(sl.qty_in - sl.qty_out) - COALESCE((
+            SELECT SUM(sdi.quantity) 
+            FROM sales_doc_items sdi
+            JOIN sales_docs sd ON sd.id = sdi.sales_doc_id
+            WHERE sdi.product_id = p_product_id 
+            AND sd.status NOT IN ('CANCELLED', 'COMPLETED')
+        ), 0) as available_stock
+    FROM stock_ledger sl
+    WHERE sl.product_id = p_product_id 
+    AND sl.warehouse_id = p_warehouse_id
+    GROUP BY sl.product_id, sl.warehouse_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Función para crear sucursal, almacén y series documentales por defecto
+CREATE OR REPLACE FUNCTION create_default_branch_warehouse_series()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_branch_id UUID;
+    v_warehouse_id UUID;
+BEGIN
+    -- Crear sucursal por defecto
+    INSERT INTO branches (company_id, code, name, address)
+    VALUES (NEW.id, '001', 'Casa Matriz', 'Dirección principal')
+    RETURNING id INTO v_branch_id;
+
+    -- Crear almacén por defecto
+    INSERT INTO warehouses (company_id, branch_id, code, name, warehouse_type)
+    VALUES (NEW.id, v_branch_id, '001', 'Almacén Principal', 'GENERAL')
+    RETURNING id INTO v_warehouse_id;
+
+    -- Crear series documentales por defecto (Factura y Boleta)
+    INSERT INTO document_series (company_id, document_type_code, series, branch_id, is_active)
+    VALUES 
+        (NEW.id, '01', 'F001', v_branch_id, true),
+        (NEW.id, '03', 'B001', v_branch_id, true);
+
+    -- Inicializar contadores para las series
+    INSERT INTO document_counters (company_id, document_type_code, series, last_number)
+    VALUES 
+        (NEW.id, '01', 'F001', 0),
+        (NEW.id, '03', 'B001', 0);
+
+    RETURN NEW;
+END;
+$$;
+
+-- 2. Trigger que se ejecuta después de insertar una nueva empresa
+CREATE TRIGGER trg_after_company_insert
+    AFTER INSERT ON companies
+    FOR EACH ROW
+    EXECUTE FUNCTION create_default_branch_warehouse_series();
+
+-- 3. Función adicional para crear ubicaciones por defecto en el almacén
+CREATE OR REPLACE FUNCTION create_default_warehouse_locations()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    -- Crear una zona por defecto en el almacén
+    INSERT INTO warehouse_zones (company_id, warehouse_id, code, name, width, height, length)
+    VALUES (NEW.company_id, NEW.id, 'ZONA-01', 'Zona Principal', 10, 3, 10);
+
+    -- Crear un pasillo por defecto
+    INSERT INTO warehouse_aisles (company_id, warehouse_zone_id, code, name, direction)
+    SELECT 
+        NEW.company_id, 
+        wz.id, 
+        'PAS-01', 
+        'Pasillo Principal', 
+        'HORIZONTAL'
+    FROM warehouse_zones wz 
+    WHERE wz.warehouse_id = NEW.id 
+    LIMIT 1;
+
+    -- Crear un estante por defecto
+    INSERT INTO warehouse_shelves (company_id, warehouse_aisle_id, code, name, levels, level_height)
+    SELECT 
+        NEW.company_id, 
+        wa.id, 
+        'EST-01', 
+        'Estante Principal', 
+        4, 
+        0.5
+    FROM warehouse_aisles wa 
+    WHERE wa.warehouse_zone_id IN (
+        SELECT id FROM warehouse_zones WHERE warehouse_id = NEW.id
+    ) 
+    LIMIT 1;
+
+    RETURN NEW;
+END;
+$$;
+
+-- 4. Trigger que se ejecuta después de insertar un nuevo almacén
+CREATE TRIGGER trg_after_warehouse_insert
+    AFTER INSERT ON warehouses
+    FOR EACH ROW
+    EXECUTE FUNCTION create_default_warehouse_locations();

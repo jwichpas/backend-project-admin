@@ -31,7 +31,7 @@ export function useWarehouseVisualizer() {
   const error = ref<string | null>(null)
   const selectedWarehouse = ref<string | null>(null)
   const selectedProduct = ref<string | null>(null)
-  const viewMode = ref<'table' | '2d' | '3d'>('table')
+  const viewMode = ref<'cards' | 'table' | '2d' | '3d'>('cards')
   const searchQuery = ref('')
 
   const warehouses = ref<Warehouse[]>([])
@@ -359,7 +359,7 @@ export function useWarehouseVisualizer() {
     }
   }
 
-  const setViewMode = (mode: 'table' | '2d' | '3d') => {
+  const setViewMode = (mode: 'cards' | 'table' | '2d' | '3d') => {
     viewMode.value = mode
   }
 

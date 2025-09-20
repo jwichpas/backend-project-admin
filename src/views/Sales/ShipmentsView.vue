@@ -193,25 +193,224 @@
       </CardContent>
     </Card>
 
+    <!-- View Shipment Dialog -->
+    <Dialog v-model:open="showViewShipmentDialog">
+      <DialogContent class="max-w-4xl">
+        <DialogHeader>
+          <DialogTitle v-if="selectedShipment">
+            Envío #{{ selectedShipment.id.slice(-8).toUpperCase() }}
+          </DialogTitle>
+        </DialogHeader>
+        <div v-if="selectedShipment" class="space-y-6">
+          <!-- Shipment Information -->
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <label class="text-sm font-medium text-muted-foreground">Estado</label>
+              <Badge :variant="getShipmentStatusVariant(selectedShipment.status)" class="mt-1">
+                {{ getShipmentStatusLabel(selectedShipment.status) }}
+              </Badge>
+            </div>
+            <div>
+              <label class="text-sm font-medium text-muted-foreground">Fecha de Envío</label>
+              <p class="text-sm">{{ formatDate(selectedShipment.shipment_date) }}</p>
+            </div>
+            <div>
+              <label class="text-sm font-medium text-muted-foreground">Almacén</label>
+              <p class="text-sm">{{ selectedShipment.warehouse_name || 'N/A' }}</p>
+            </div>
+            <div>
+              <label class="text-sm font-medium text-muted-foreground">Fecha de Creación</label>
+              <p class="text-sm">{{ formatDate(selectedShipment.created_at) }}</p>
+            </div>
+          </div>
+
+          <!-- Document/Order Information -->
+          <div class="grid grid-cols-2 gap-4">
+            <div v-if="selectedShipment.sales_doc_number">
+              <label class="text-sm font-medium text-muted-foreground">Documento de Venta</label>
+              <p class="text-sm font-medium">{{ selectedShipment.sales_doc_number }}</p>
+            </div>
+            <div v-if="selectedShipment.sales_order_number">
+              <label class="text-sm font-medium text-muted-foreground">Orden de Venta</label>
+              <p class="text-sm font-medium">{{ selectedShipment.sales_order_number }}</p>
+            </div>
+          </div>
+
+          <!-- Vehicle and Driver Information -->
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="text-sm font-medium text-muted-foreground">Vehículo</label>
+              <p class="text-sm">{{ selectedShipment.vehicle_plate || 'Sin asignar' }}</p>
+            </div>
+            <div>
+              <label class="text-sm font-medium text-muted-foreground">Conductor</label>
+              <p class="text-sm">{{ selectedShipment.driver_name || 'Sin asignar' }}</p>
+            </div>
+          </div>
+
+          <!-- Shipment Items -->
+          <div>
+            <h4 class="text-lg font-semibold mb-4">Productos del Envío</h4>
+            <div class="border border-border rounded-lg overflow-hidden">
+              <table class="w-full">
+                <thead class="bg-muted">
+                  <tr>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Producto</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Cantidad</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Estado</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-border">
+                  <tr v-if="!selectedShipment.items || selectedShipment.items.length === 0">
+                    <td colspan="3" class="px-4 py-8 text-center text-muted-foreground">
+                      <div class="flex flex-col items-center gap-2">
+                        <Clock class="h-6 w-6" />
+                        <span>Cargando productos...</span>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr v-for="item in selectedShipment.items" :key="item.id" class="hover:bg-muted/50">
+                    <td class="px-4 py-3">
+                      <div class="font-medium">{{ item.product_name || 'Producto sin nombre' }}</div>
+                      <div class="text-xs text-muted-foreground">SKU: {{ item.product_sku || 'N/A' }}</div>
+                    </td>
+                    <td class="px-4 py-3">
+                      <span class="text-sm">{{ item.quantity_shipped || 0 }}</span>
+                    </td>
+                    <td class="px-4 py-3">
+                      <Badge variant="outline">Enviado</Badge>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div class="flex justify-end gap-3 pt-4 border-t border-border">
+            <Button variant="outline" @click="showViewShipmentDialog = false">
+              Cerrar
+            </Button>
+            <Button
+              v-if="selectedShipment.status === 'PARTIAL'"
+              @click="completeShipmentFromDialog"
+            >
+              Marcar como Completo
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+
     <!-- Create Shipment Dialog -->
     <Dialog v-model:open="showCreateShipmentDialog">
       <DialogContent class="max-w-4xl">
         <DialogHeader>
           <DialogTitle>Nuevo Envío</DialogTitle>
         </DialogHeader>
-        <div class="text-center py-8">
-          <Truck class="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-          <h3 class="text-lg font-semibold mb-2">Formulario de Envío</h3>
-          <p class="text-muted-foreground mb-4">Este formulario está en desarrollo</p>
-          <div class="flex justify-center gap-3">
-            <Button type="button" variant="outline" @click="showCreateShipmentDialog = false">
+        <form @submit.prevent="createNewShipment" class="space-y-6">
+          <!-- Basic Information -->
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-foreground mb-2">
+                Fecha de Envío *
+              </label>
+              <input
+                v-model="newShipmentForm.shipment_date"
+                type="date"
+                required
+                class="w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-foreground mb-2">
+                Almacén
+              </label>
+              <input
+                v-model="newShipmentForm.warehouse_name"
+                type="text"
+                placeholder="Nombre del almacén"
+                class="w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+          </div>
+
+          <!-- Document/Order Selection -->
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-foreground mb-2">
+                Número de Documento
+              </label>
+              <input
+                v-model="newShipmentForm.sales_doc_number"
+                type="text"
+                placeholder="Ej: F001-00001234"
+                class="w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-foreground mb-2">
+                Número de Orden
+              </label>
+              <input
+                v-model="newShipmentForm.sales_order_number"
+                type="text"
+                placeholder="Ej: ORD-2024-001"
+                class="w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+          </div>
+
+          <!-- Vehicle and Driver -->
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-foreground mb-2">
+                Placa del Vehículo
+              </label>
+              <input
+                v-model="newShipmentForm.vehicle_plate"
+                type="text"
+                placeholder="Ej: ABC-123"
+                class="w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-foreground mb-2">
+                Nombre del Conductor
+              </label>
+              <input
+                v-model="newShipmentForm.driver_name"
+                type="text"
+                placeholder="Nombre completo del conductor"
+                class="w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+          </div>
+
+          <!-- Status -->
+          <div>
+            <label class="block text-sm font-medium text-foreground mb-2">
+              Estado Inicial
+            </label>
+            <select
+              v-model="newShipmentForm.status"
+              class="w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              <option value="PARTIAL">Parcial</option>
+              <option value="COMPLETE">Completo</option>
+            </select>
+          </div>
+
+          <!-- Actions -->
+          <div class="flex justify-end gap-3 pt-4 border-t border-border">
+            <Button type="button" variant="outline" @click="cancelCreateShipment">
               Cancelar
             </Button>
-            <Button type="button">
-              Crear Envío (Demo)
+            <Button type="submit" :disabled="creatingShipment">
+              {{ creatingShipment ? 'Creando...' : 'Crear Envío' }}
             </Button>
           </div>
-        </div>
+        </form>
       </DialogContent>
     </Dialog>
   </div>
@@ -221,6 +420,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useCompaniesStore } from '@/stores/companies'
 import { useSalesStore } from '@/stores/sales'
+import { useProductLocationTracking } from '@/composables/useProductLocationTracking'
 import {
   Download,
   Plus,
@@ -242,10 +442,25 @@ import DialogTitle from '@/components/ui/DialogTitle.vue'
 
 const companiesStore = useCompaniesStore()
 const salesStore = useSalesStore()
+const locationTracking = useProductLocationTracking()
 
 // State
 const showCreateShipmentDialog = ref(false)
+const showViewShipmentDialog = ref(false)
+const selectedShipment = ref(null)
 const statusFilter = ref('')
+const creatingShipment = ref(false)
+
+// New shipment form
+const newShipmentForm = ref({
+  shipment_date: new Date().toISOString().split('T')[0], // Today's date
+  warehouse_name: '',
+  sales_doc_number: '',
+  sales_order_number: '',
+  vehicle_plate: '',
+  driver_name: '',
+  status: 'PARTIAL' as 'PARTIAL' | 'COMPLETE'
+})
 
 // Computed
 const completeCount = computed(() => {
@@ -276,7 +491,48 @@ const filteredShipments = computed(() => {
 
 // Methods
 const exportShipments = () => {
-  console.log('Export shipments')
+  try {
+    // Prepare data for export
+    const exportData = filteredShipments.value.map(shipment => ({
+      'ID Envío': shipment.id.slice(-8).toUpperCase(),
+      'Fecha Envío': formatDate(shipment.shipment_date),
+      'Almacén': shipment.warehouse_name || 'N/A',
+      'Documento': shipment.sales_doc_number || shipment.sales_order_number || 'Directo',
+      'Vehículo': shipment.vehicle_plate || 'Sin asignar',
+      'Conductor': shipment.driver_name || 'Sin asignar',
+      'Estado': getShipmentStatusLabel(shipment.status),
+      'Fecha Creación': formatDate(shipment.created_at)
+    }))
+
+    // Convert to CSV
+    const headers = Object.keys(exportData[0] || {})
+    const csvContent = [
+      headers.join(','),
+      ...exportData.map(row =>
+        headers.map(header => {
+          const value = row[header as keyof typeof row] || ''
+          // Escape commas and quotes in CSV
+          return `"${String(value).replace(/"/g, '""')}"`
+        }).join(',')
+      )
+    ].join('\n')
+
+    // Create and download file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    link.setAttribute('download', `envios_${new Date().toISOString().split('T')[0]}.csv`)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+
+    alert('¡Exportación completada exitosamente!')
+  } catch (error) {
+    console.error('Error exporting shipments:', error)
+    alert('Error al exportar los envíos. Por favor, intente nuevamente.')
+  }
 }
 
 const formatDate = (dateString: string) => {
@@ -305,29 +561,140 @@ const getShipmentStatusVariant = (status: string) => {
   return variants[status as keyof typeof variants] || 'secondary'
 }
 
-const viewShipment = (shipment: any) => {
-  console.log('View shipment:', shipment)
-  // TODO: Implement shipment view dialog
+const viewShipment = async (shipment: any) => {
+  selectedShipment.value = shipment
+
+  // Cargar los items del envío
+  try {
+    await salesStore.fetchShipmentItems(shipment.id)
+    // Asignar los items cargados al shipment seleccionado
+    selectedShipment.value = {
+      ...shipment,
+      items: salesStore.shipmentItems
+    }
+  } catch (error) {
+    console.error('Error loading shipment items:', error)
+  }
+
+  showViewShipmentDialog.value = true
 }
 
 const completeShipment = async (shipment: any) => {
+  if (!confirm(`¿Está seguro de que desea marcar el envío #${shipment.id.slice(-8).toUpperCase()} como completo?`)) {
+    return
+  }
+
   try {
-    // Update shipment status to COMPLETE
+    // Update shipment status
     await salesStore.updateShipment(shipment.id, {
       status: 'COMPLETE'
     })
 
-    // Update the local data
+    // Record location movements for shipped products
+    if (shipment.shipment_details && shipment.shipment_details.length > 0) {
+      const userId = companiesStore.currentUser?.id
+
+      for (const detail of shipment.shipment_details) {
+        try {
+          await locationTracking.moveProduct({
+            product_id: detail.product_id,
+            to_warehouse_zone_id: '', // External location for shipments
+            quantity: detail.quantity_shipped,
+            movement_type: 'SHIPMENT',
+            reference_id: shipment.id,
+            reference_type: 'shipment',
+            notes: `Envío completado - ${shipment.delivery_address || 'Dirección no especificada'}`
+          }, userId)
+        } catch (locationError) {
+          console.warn(`Warning: Could not record location movement for product ${detail.product_id}:`, locationError)
+          // Continue with other products even if one fails
+        }
+      }
+    }
+
+    // Actualizar los datos locales
     const shipmentIndex = salesStore.shipments.findIndex(s => s.id === shipment.id)
     if (shipmentIndex !== -1) {
       salesStore.shipments[shipmentIndex].status = 'COMPLETE'
     }
-    
-    console.log('Shipment completed successfully!')
-    
+
+    alert('¡Envío marcado como completo exitosamente!')
+
   } catch (error) {
     console.error('Error completing shipment:', error)
-    // TODO: Show error message
+    alert('Error al completar el envío. Por favor, intente nuevamente.')
+  }
+}
+
+const completeShipmentFromDialog = async () => {
+  if (!selectedShipment.value) return
+
+  await completeShipment(selectedShipment.value)
+
+  // Actualizar el selectedShipment si fue completado exitosamente
+  if (selectedShipment.value) {
+    selectedShipment.value.status = 'COMPLETE'
+  }
+
+  // Cerrar el diálogo después de completar
+  showViewShipmentDialog.value = false
+}
+
+const createNewShipment = async () => {
+  if (!companiesStore.currentCompany) {
+    alert('No hay empresa seleccionada')
+    return
+  }
+
+  creatingShipment.value = true
+
+  try {
+    // Prepare shipment data
+    const shipmentData = {
+      company_id: companiesStore.currentCompany.id,
+      shipment_date: newShipmentForm.value.shipment_date,
+      warehouse_name: newShipmentForm.value.warehouse_name || null,
+      sales_doc_number: newShipmentForm.value.sales_doc_number || null,
+      sales_order_number: newShipmentForm.value.sales_order_number || null,
+      vehicle_plate: newShipmentForm.value.vehicle_plate || null,
+      driver_name: newShipmentForm.value.driver_name || null,
+      status: newShipmentForm.value.status
+    }
+
+    // Create the shipment
+    await salesStore.createShipment(shipmentData)
+
+    // Reset form and close dialog
+    resetNewShipmentForm()
+    showCreateShipmentDialog.value = false
+
+    // Refresh shipments list
+    await salesStore.fetchShipments(companiesStore.currentCompany.id)
+
+    alert('¡Envío creado exitosamente!')
+
+  } catch (error) {
+    console.error('Error creating shipment:', error)
+    alert('Error al crear el envío. Por favor, intente nuevamente.')
+  } finally {
+    creatingShipment.value = false
+  }
+}
+
+const cancelCreateShipment = () => {
+  resetNewShipmentForm()
+  showCreateShipmentDialog.value = false
+}
+
+const resetNewShipmentForm = () => {
+  newShipmentForm.value = {
+    shipment_date: new Date().toISOString().split('T')[0],
+    warehouse_name: '',
+    sales_doc_number: '',
+    sales_order_number: '',
+    vehicle_plate: '',
+    driver_name: '',
+    status: 'PARTIAL'
   }
 }
 

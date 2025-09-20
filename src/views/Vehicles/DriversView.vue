@@ -160,7 +160,7 @@
 
               <td class="p-4">
                 <div>
-                  <p class="font-medium">{{ driver.nombre_completo || driver.user?.full_name || driver.user?.email || 'N/A' }}</p>
+                  <p class="font-medium">{{ driver.party?.fullname || driver.nombre_completo || 'N/A' }}</p>
                   <p class="text-sm text-muted-foreground">
                     Registrado: {{ formatDate(driver.created_at) }}
                   </p>
@@ -175,9 +175,9 @@
               </td>
 
               <td class="p-4">
-                <div v-if="driver.numero_documento">
-                  <p class="font-medium">{{ driver.numero_documento }}</p>
-                  <p class="text-sm text-muted-foreground">DNI/CE</p>
+                <div v-if="driver.party?.doc_number">
+                  <p class="font-medium">{{ driver.party.doc_number }}</p>
+                  <p class="text-sm text-muted-foreground">{{ driver.party.doc_type || 'DNI' }}</p>
                 </div>
                 <span v-else class="text-muted-foreground">N/A</span>
               </td>
@@ -298,6 +298,7 @@
             <label class="text-sm font-medium">Persona *</label>
             <select
               v-model="driverForm.party_id"
+              @change="onPersonSelected"
               class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               required
             >
@@ -307,7 +308,7 @@
                 :key="person.id"
                 :value="person.id"
               >
-                {{ person.fullname }} - {{ person.doc_number }}
+                {{ person.name || person.fullname }} - {{ person.doc_number }}
               </option>
             </select>
             <p class="text-xs text-muted-foreground mt-1">
@@ -357,23 +358,36 @@
             </div>
 
             <div>
-              <label class="text-sm font-medium">Número de Documento (Opcional)</label>
+              <label class="text-sm font-medium">Tipo de Documento</label>
               <Input
-                v-model="driverForm.numero_documento"
-                placeholder="12345678"
+                v-model="selectedPersonData.doc_type"
+                readonly
+                placeholder="Se completará automáticamente"
+                class="bg-muted"
               />
             </div>
           </div>
 
-          <div>
-            <label class="text-sm font-medium">Nombre Completo (Opcional)</label>
-            <Input
-              v-model="driverForm.nombre_completo"
-              placeholder="Se completará automáticamente desde la persona seleccionada"
-            />
-            <p class="text-xs text-muted-foreground mt-1">
-              Este campo se usa para búsquedas rápidas. Se completará automáticamente si no se especifica.
-            </p>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="text-sm font-medium">Nombre Completo</label>
+              <Input
+                v-model="selectedPersonData.fullname"
+                readonly
+                placeholder="Se completará automáticamente"
+                class="bg-muted"
+              />
+            </div>
+
+            <div>
+              <label class="text-sm font-medium">Número de Documento</label>
+              <Input
+                v-model="selectedPersonData.doc_number"
+                readonly
+                placeholder="Se completará automáticamente"
+                class="bg-muted"
+              />
+            </div>
           </div>
 
           <div class="flex justify-end gap-2 pt-4">
@@ -404,15 +418,11 @@
               <div class="space-y-2">
                 <div class="flex justify-between">
                   <span class="text-muted-foreground">Nombre:</span>
-                  <span class="font-medium">{{ selectedDriver.nombre_completo || selectedDriver.party?.fullname || 'N/A' }}</span>
+                  <span class="font-medium">{{ selectedDriver.party?.fullname || 'N/A' }}</span>
                 </div>
                 <div class="flex justify-between">
                   <span class="text-muted-foreground">Documento:</span>
                   <span>{{ selectedDriver.party?.doc_number || 'N/A' }}</span>
-                </div>
-                <div class="flex justify-between">
-                  <span class="text-muted-foreground">Tipo de Documento:</span>
-                  <span>{{ selectedDriver.party?.doc_type || 'N/A' }}</span>
                 </div>
                 <div class="flex justify-between">
                   <span class="text-muted-foreground">Email:</span>
@@ -502,7 +512,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useCompaniesStore } from '@/stores/companies'
 import { useSalesStore } from '@/stores/sales'
 import { useDrivers, type Driver, type CreateDriverData, type UpdateDriverData } from '@/composables/useDrivers'
@@ -565,14 +575,21 @@ const availablePeople = computed(() =>
   salesStore.activeCustomers?.filter(customer => !customer.is_company) || []
 )
 
+// Selected person data for auto-fill
+const selectedPersonData = ref({
+  fullname: '',
+  doc_number: '',
+  doc_type: '',
+  email: '',
+  phone: ''
+})
+
 // Driver form
 const driverForm = ref<CreateDriverData>({
   party_id: '',
   license_number: '',
   license_class: null,
   valid_until: null,
-  numero_documento: null,
-  nombre_completo: null
 })
 
 // Filtered drivers
@@ -583,10 +600,9 @@ const filteredDrivers = computed(() => {
   if (searchQuery.value) {
     const query = searchQuery.value.toLowerCase()
     filtered = filtered.filter(driver =>
-      (driver.nombre_completo || driver.party?.fullname || '').toLowerCase().includes(query) ||
+      (driver.party?.fullname || '').toLowerCase().includes(query) ||
       driver.license_number.toLowerCase().includes(query) ||
-      driver.party?.doc_number?.toLowerCase().includes(query) ||
-      driver.numero_documento?.toLowerCase().includes(query)
+      (driver.party?.doc_number || '').toLowerCase().includes(query)
     )
   }
 
@@ -626,9 +642,14 @@ const openCreateDialog = () => {
     party_id: '',
     license_number: '',
     license_class: null,
-    valid_until: null,
-    numero_documento: null,
-    nombre_completo: null
+    valid_until: null
+  }
+  selectedPersonData.value = {
+    fullname: '',
+    doc_number: '',
+    doc_type: '',
+    email: '',
+    phone: ''
   }
   showDriverDialog.value = true
 }
@@ -640,8 +661,16 @@ const editDriver = (driver: Driver) => {
     license_number: driver.license_number,
     license_class: driver.license_class,
     valid_until: driver.valid_until,
-    numero_documento: driver.numero_documento,
-    nombre_completo: driver.nombre_completo
+  }
+  // Fill person data if editing
+  if (driver.party) {
+    selectedPersonData.value = {
+      fullname: driver.party.fullname || driver.party.name || '',
+      doc_number: driver.party.doc_number || '',
+      doc_type: driver.party.doc_type || '',
+      email: driver.party.email || '',
+      phone: driver.party.phone || ''
+    }
   }
   showDriverDialog.value = true
 }
@@ -655,10 +684,18 @@ const saveDriver = async () => {
     if (editingDriver.value) {
       await updateDriver({
         id: editingDriver.value.id,
-        ...driverForm.value
+        party_id: driverForm.value.party_id,
+        license_number: driverForm.value.license_number,
+        license_class: driverForm.value.license_class,
+        valid_until: driverForm.value.valid_until
       } as UpdateDriverData)
     } else {
-      await createDriver(companiesStore.currentCompany.id, driverForm.value)
+      await createDriver(companiesStore.currentCompany.id, {
+        party_id: driverForm.value.party_id,
+        license_number: driverForm.value.license_number,
+        license_class: driverForm.value.license_class,
+        valid_until: driverForm.value.valid_until
+      })
     }
 
     showDriverDialog.value = false
@@ -675,7 +712,7 @@ const viewDriverDetails = (driver: Driver) => {
 }
 
 const confirmDelete = (driver: Driver) => {
-  if (confirm(`¿Estás seguro de que deseas eliminar al conductor ${driver.nombre_completo || driver.party?.fullname}?`)) {
+  if (confirm(`¿Estás seguro de que deseas eliminar al conductor ${driver.party?.fullname}?`)) {
     deleteDriver(driver.id)
   }
 }
@@ -688,6 +725,30 @@ const manageVehicleAssignments = (driver: Driver) => {
 const exportDrivers = () => {
   // TODO: Implement CSV export functionality
   console.log('Export drivers to CSV')
+}
+
+// Handle person selection and auto-fill data
+const onPersonSelected = () => {
+  if (driverForm.value.party_id) {
+    const selectedPerson = availablePeople.value.find(p => p.id === driverForm.value.party_id)
+    if (selectedPerson) {
+      selectedPersonData.value = {
+        fullname: selectedPerson.name || selectedPerson.fullname || '',
+        doc_number: selectedPerson.doc_number || '',
+        doc_type: selectedPerson.doc_type || '',
+        email: selectedPerson.email || '',
+        phone: selectedPerson.phone || ''
+      }
+    }
+  } else {
+    selectedPersonData.value = {
+      fullname: '',
+      doc_number: '',
+      doc_type: '',
+      email: '',
+      phone: ''
+    }
+  }
 }
 
 // Helper functions
@@ -740,4 +801,18 @@ const formatDate = (dateString: string) => {
 onMounted(async () => {
   await refreshData()
 })
+
+// Watch for company changes
+watch(
+  () => companiesStore.currentCompany,
+  async (newCompany, oldCompany) => {
+    if (newCompany && oldCompany && newCompany.id !== oldCompany.id) {
+      console.log('Company changed in DriversView, reloading data...', {
+        from: oldCompany.id,
+        to: newCompany.id
+      })
+      await refreshData()
+    }
+  }, { deep: true }
+)
 </script>

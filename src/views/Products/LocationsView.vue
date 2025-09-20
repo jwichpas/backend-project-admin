@@ -551,7 +551,7 @@ const refreshData = async () => {
     // Debug warehouse data
     console.log('🏭 Warehouses loaded:', warehouseVisualizer.warehouses.value)
     console.log('📦 Zones loaded:', warehouseVisualizer.zones.value)
-    console.log('📍 Locations loaded:', warehouseVisualizer.locations.value)
+    console.log('📍 Locations loaded:', warehouseVisualizer.productLocations.value)
     console.log('🏗️ Selected warehouse data:', warehouseVisualizer.selectedWarehouseData.value)
     console.log('📐 Warehouse bounds:', warehouseVisualizer.warehouseBounds.value)
 

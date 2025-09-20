@@ -42,7 +42,7 @@ CREATE DOMAIN monetary AS NUMERIC(18,6) CHECK (VALUE >= 0);
 CREATE DOMAIN percentage AS NUMERIC(18,6) CHECK (VALUE >= 0 AND VALUE <= 100);
 CREATE DOMAIN quantity AS NUMERIC(18,6) CHECK (VALUE >= 0);
 CREATE DOMAIN ruc_pe AS VARCHAR(11) CHECK (VALUE ~ '^\\d{11}$');
-CREATE DOMAIN email_address AS TEXT CHECK (VALUE ~* '^[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}$');
+CREATE DOMAIN email_address AS TEXT CHECK (VALUE ~* '^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$');
 
 -- PASO 3: TABLAS DE CATÁLOGOS SUNAT
 -- ============================================================================
@@ -121,7 +121,9 @@ CREATE TABLE IF NOT EXISTS sunat.ubigeo (
   code varchar(6) primary key,
   departamento text,
   provincia text,
-  distrito text
+  distrito text,
+  latitude NUMERIC(10, 6) NOT NULL,
+  longitude NUMERIC(10, 6) NOT NULL
 );
 
 -- FINANZAS - BANCOS Y MEDIOS DE PAGO
@@ -710,7 +712,9 @@ CREATE INDEX idx_product_price_history_product ON product_price_history(product_
 CREATE TABLE IF NOT EXISTS product_location (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     product_id UUID REFERENCES products(id) ON DELETE CASCADE,
+    warehouse_id UUID REFERENCES warehouses(id) ON DELETE CASCADE,
     warehouse_zone_id UUID REFERENCES warehouse_zones(id) ON DELETE CASCADE,
+    location_priority INTEGER DEFAULT 1 CHECK (location_priority BETWEEN 1 AND 10),
     position_x NUMERIC(8,2),
     position_y NUMERIC(8,2),
     position_z NUMERIC(8,2),
@@ -718,10 +722,28 @@ CREATE TABLE IF NOT EXISTS product_location (
     stock_actual NUMERIC(10,2) DEFAULT 0 CHECK (stock_actual >= 0),
     es_principal BOOLEAN DEFAULT false, -- Ubicación principal del producto
     estado BOOLEAN DEFAULT true,
+    last_stock_check TIMESTAMPTZ,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX IF NOT EXISTS idx_product_location_warehouse_zone 
+ON product_location(warehouse_id, warehouse_zone_id);
 
+
+
+-- Función para actualizar automáticamente el último chequeo de stock
+CREATE OR REPLACE FUNCTION update_location_stock_check()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.last_stock_check = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_update_stock_check
+    BEFORE UPDATE OF stock_actual ON product_location
+    FOR EACH ROW
+    EXECUTE FUNCTION update_location_stock_check();
 -- PASO 10: TABLAS PARA LOTES Y SERIES
 -- ============================================================================
 
@@ -872,17 +894,17 @@ CREATE INDEX idx_vehicle_logs_reported_at ON vehicle_position_logs(reported_at);
 CREATE TABLE IF NOT EXISTS drivers (
   id uuid primary key default gen_random_uuid(),
   company_id uuid not null references companies(id) on delete cascade,
-  /* party_id uuid not null references parties(id) on delete restrict, */
-  user_id uuid not null references auth.users(id) on delete restrict,
+  party_id uuid not null references parties(id) on delete restrict,
+  user_id uuid null references auth.users(id) on delete restrict,
   license_number text not null,
   license_class text,
-  valid_until date,
-  numero_documento varchar(15),
-  nombre_completo text,
+  valid_until date,  
   created_at timestamptz default now(),
   updated_at timestamptz default now(),
   unique(company_id, license_number)
 );
+CREATE INDEX IF NOT EXISTS idx_drivers_party_id ON drivers(party_id);
+CREATE INDEX IF NOT EXISTS idx_drivers_company_license ON drivers(company_id, license_number);
 
 CREATE TRIGGER update_drivers_updated_at BEFORE UPDATE ON drivers FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
 
@@ -981,6 +1003,7 @@ CREATE TABLE IF NOT EXISTS purchase_docs (
 
 CREATE INDEX IF NOT EXISTS idx_purchase_unique ON purchase_docs(company_id, doc_type, series, number);
 CREATE TRIGGER update_purchase_docs_updated_at BEFORE UPDATE ON purchase_docs FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
+COMMENT ON COLUMN purchase_docs.notes IS 'Additional notes or observations for the purchase document';
 
 CREATE TABLE IF NOT EXISTS purchase_doc_items (
   id uuid primary key default gen_random_uuid(),
@@ -1748,22 +1771,53 @@ SELECT
     odo.vehicle_id,
     v.plate AS vehicle_plate,
     odo.driver_id,
-    d.nombre_completo AS driver_name,
+    get_driver_name(odo.driver_id) AS driver_name,
+    p.doc_number AS driver_document,
+    p.doc_type AS driver_document_type,
     odo.status,
     odo.notes,
     (SELECT COUNT(*) FROM dispatch_order_sales_docs WHERE dispatch_order_id = odo.id) AS num_sales_docs,
-    (SELECT COUNT(DISTINCT sd.customer_id) 
-     FROM dispatch_order_sales_docs dosd 
-     JOIN sales_docs sd ON sd.id = dosd.sales_doc_id 
-     WHERE dosd.dispatch_order_id = odo.id) AS num_customers,  -- Nuevo: Número de clientes
+    (SELECT COUNT(DISTINCT sd.customer_id)
+     FROM dispatch_order_sales_docs dosd
+     JOIN sales_docs sd ON sd.id = dosd.sales_doc_id
+     WHERE dosd.dispatch_order_id = odo.id) AS num_customers,
     (SELECT SUM(total_quantity) FROM v_dispatch_order_items_consolidated WHERE dispatch_order_id = odo.id) AS total_items_quantity,
+    (SELECT STRING_AGG(DISTINCT pt.fullname, ', ' ORDER BY pt.fullname)
+     FROM dispatch_order_sales_docs dosd
+     JOIN sales_docs sd ON sd.id = dosd.sales_doc_id
+     JOIN parties pt ON pt.id = sd.customer_id
+     WHERE dosd.dispatch_order_id = odo.id) AS customer_names,
     odo.created_at,
     odo.updated_at
 FROM dispatch_orders odo
 JOIN warehouses w ON w.id = odo.warehouse_id
 LEFT JOIN vehicles v ON v.id = odo.vehicle_id
 LEFT JOIN drivers d ON d.id = odo.driver_id
+LEFT JOIN parties p ON p.id = d.party_id
 WHERE odo.deleted_at IS NULL;
+
+-- ============================================================================
+-- FUNCIÓN PARA OBTENER NOMBRE DE CONDUCTOR
+-- ============================================================================
+
+-- Función para obtener el nombre completo del conductor basado en driver_id
+CREATE OR REPLACE FUNCTION get_driver_name(driver_uuid UUID)
+RETURNS TEXT
+LANGUAGE plpgsql
+STABLE
+AS $$
+DECLARE
+    driver_name TEXT;
+BEGIN
+    SELECT p.fullname
+    INTO driver_name
+    FROM drivers d
+    JOIN parties p ON p.id = d.party_id
+    WHERE d.id = driver_uuid;
+
+    RETURN COALESCE(driver_name, 'Sin asignar');
+END;
+$$;
 
 -- ============================================================================
 -- RECOMENDACIONES ACTUALIZADAS
@@ -2041,3 +2095,23 @@ COMMENT ON TABLE warehouse_shelf_positions IS 'Posiciones específicas en cada n
 COMMENT ON COLUMN warehouse_shelf_positions.location_code IS 'Código completo de ubicación: Pasillo-Estante-Nivel-Posición (ej: A1-01-3-2)';
 COMMENT ON VIEW v_product_locations_detailed IS 'Vista consolidada con información completa de ubicaciones jerárquicas';
 
+-- Tabla para tracking de movimientos de ubicación
+CREATE TABLE IF NOT EXISTS product_location_history (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    from_warehouse_zone_id UUID REFERENCES warehouse_zones(id),
+    to_warehouse_zone_id UUID REFERENCES warehouse_zones(id),
+    from_shelf_position_id UUID REFERENCES warehouse_shelf_positions(id),
+    to_shelf_position_id UUID REFERENCES warehouse_shelf_positions(id),
+    quantity NUMERIC(18,6) NOT NULL,
+    movement_type TEXT CHECK (movement_type IN ('TRANSFER', 'RECEIPT', 'SHIPMENT', 'ADJUSTMENT')),
+    reference_id UUID, -- ID del documento relacionado
+    reference_type TEXT, -- Tipo de documento (shipment_id, reception_id, etc.)
+    moved_by UUID REFERENCES auth.users(id),
+    moved_at TIMESTAMPTZ DEFAULT NOW(),
+    notes TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_product_location_history_product ON product_location_history(product_id);
+CREATE INDEX IF NOT EXISTS idx_product_location_history_date ON product_location_history(moved_at);
+CREATE INDEX IF NOT EXISTS idx_product_location_history_reference ON product_location_history(reference_type, reference_id);

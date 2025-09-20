@@ -4,14 +4,23 @@ import { supabase } from '@/lib/supabase'
 export interface Driver {
   id: string
   company_id: string
-  user_id: string
+  party_id: string
+  user_id: string | null
   license_number: string
   license_class: string | null
   valid_until: string | null
-  numero_documento: string | null
-  nombre_completo: string | null
   created_at: string
   updated_at: string
+  // From party relation
+  party?: {
+    id: string
+    fullname: string
+    doc_number: string
+    doc_type: string
+    email: string | null
+    phone: string | null
+    address: string | null
+  }
   // From user relation
   user?: {
     id: string
@@ -27,23 +36,23 @@ export interface Driver {
     tracking_enabled: boolean
   }
   current_location?: {
-    id: string
+    device_id: string
     latitude: number
     longitude: number
     accuracy_meters: number | null
-    speed_kph: number | null
-    heading_degrees: number | null
-    updated_at: string
+    device_timestamp: string
+    source: string | null
+    battery_level: number | null
+    is_online: boolean | null
   }
 }
 
 export interface CreateDriverData {
-  user_id: string
+  party_id: string
+  user_id?: string | null
   license_number: string
   license_class?: string | null
   valid_until?: string | null
-  numero_documento?: string | null
-  nombre_completo?: string | null
 }
 
 export interface UpdateDriverData extends Partial<CreateDriverData> {
@@ -63,7 +72,7 @@ export interface RegisteredDevice {
   tracking_enabled: boolean
   tracking_interval_seconds: number
   high_accuracy_enabled: boolean
-  created_at: string
+  registered_at: string
   updated_at: string
 }
 
@@ -75,16 +84,17 @@ export interface DeviceLocation {
   longitude: number
   accuracy_meters: number | null
   altitude_meters: number | null
-  speed_kph: number | null
+  speed_mps: number | null
   heading_degrees: number | null
   battery_level: number | null
-  network_type: string | null
-  signal_strength: number | null
-  is_mock_location: boolean
-  activity_type: string | null
-  activity_confidence: number | null
-  created_at: string
+  source: string
+  context: string | null
+  activity: string | null
+  session_id: string | null
+  device_timestamp: string
+  server_timestamp: string
 }
+
 
 export interface DriverWithVehicles extends Driver {
   assigned_vehicles?: {
@@ -134,56 +144,32 @@ export function useDrivers() {
         .from('drivers')
         .select(`
           *,
-          user:auth.users!user_id(
+          party:parties!party_id(
             id,
+            fullname,
+            doc_number,
+            doc_type,
             email,
             phone,
-            full_name
-          ),
-          device:registered_devices!user_id(
-            id,
-            device_name,
-            device_type,
-            tracking_enabled
-          ),
-          current_location:device_locations!user_id(
-            id,
-            latitude,
-            longitude,
-            accuracy_meters,
-            speed_kph,
-            heading_degrees,
-            created_at
+            address
           )
         `)
         .eq('company_id', companyId)
-        .order('nombre_completo')
+        .order('party(fullname)')
 
       if (includeVehicles) {
         query = supabase
           .from('drivers')
           .select(`
             *,
-            user:auth.users!user_id(
+            party:parties!party_id(
               id,
+              fullname,
+              doc_number,
+              doc_type,
               email,
               phone,
-              full_name
-            ),
-            device:registered_devices!user_id(
-              id,
-              device_name,
-              device_type,
-              tracking_enabled
-            ),
-            current_location:device_locations!user_id(
-              id,
-              latitude,
-              longitude,
-              accuracy_meters,
-              speed_kph,
-              heading_degrees,
-              created_at
+              address
             ),
             assigned_vehicles:vehicle_drivers(
               id,
@@ -191,7 +177,7 @@ export function useDrivers() {
               is_primary,
               assignment_date,
               observations,
-              vehicle:vehicles!vehicle_id(
+              vehicle:vehicles(
                 plate,
                 brand,
                 model
@@ -199,7 +185,7 @@ export function useDrivers() {
             )
           `)
           .eq('company_id', companyId)
-          .order('nombre_completo')
+          .order('party(fullname)')
       }
 
       const { data, error: supabaseError } = await query
@@ -208,16 +194,61 @@ export function useDrivers() {
         throw new Error(supabaseError.message)
       }
 
-      drivers.value = (data || []).map((driver: any) => ({
-        ...driver,
-        assigned_vehicles: includeVehicles ? (driver.assigned_vehicles || []).map((av: any) => ({
-          ...av,
-          vehicle_plate: av.vehicle?.plate,
-          vehicle_brand: av.vehicle?.brand,
-          vehicle_model: av.vehicle?.model
-        })) : undefined
+      // Enrich drivers with user, device and location data
+      const enrichedDrivers = await Promise.all((data || []).map(async (driver: any) => {
+        let profileData = null
+        let deviceData = null
+        let locationData = null
+
+        // Only fetch user-related data if user_id exists
+        if (driver.user_id) {
+          // Get user profile info for this driver
+          const profileResponse = await supabase
+            .from('profiles')
+            .select('id, first_name, last_name, image_path')
+            .eq('id', driver.user_id)
+            .maybeSingle()
+          profileData = profileResponse.data
+
+          // Get device info for this driver's user
+          const deviceResponse = await supabase
+            .from('registered_devices')
+            .select('id, device_name, device_type, tracking_enabled')
+            .eq('user_id', driver.user_id)
+            .maybeSingle()
+          deviceData = deviceResponse.data
+
+          // Get latest location for this driver's user
+          const locationResponse = await supabase
+            .from('recent_device_locations')
+            .select('device_id, latitude, longitude, accuracy_meters, device_timestamp, source, battery_level, is_online')
+            .eq('user_id', driver.user_id)
+            .maybeSingle()
+          locationData = locationResponse.data
+        }
+
+        return {
+          ...driver,
+          user: profileData ? {
+            id: profileData.id,
+            email: null, // Not available in profiles table
+            phone: null, // Not available in profiles table
+            full_name: profileData.first_name && profileData.last_name
+              ? `${profileData.first_name} ${profileData.last_name}`
+              : profileData.first_name || profileData.last_name || null
+          } : null,
+          device: deviceData || null,
+          current_location: locationData || null,
+          assigned_vehicles: includeVehicles ? (driver.assigned_vehicles || []).map((av: any) => ({
+            ...av,
+            vehicle_plate: av.vehicle?.plate,
+            vehicle_brand: av.vehicle?.brand,
+            vehicle_model: av.vehicle?.model
+          })) : undefined
+        }
       }))
 
+      drivers.value = enrichedDrivers
       return drivers.value
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Error desconocido'
@@ -235,12 +266,17 @@ export function useDrivers() {
       error.value = null
 
       // Validate license number uniqueness
-      const { data: existingDriver } = await supabase
+      const { data: existingDriver, error: checkError } = await supabase
         .from('drivers')
         .select('id')
         .eq('company_id', companyId)
         .eq('license_number', driverData.license_number)
-        .single()
+        .maybeSingle()
+
+      // If there's an error other than "no rows found", throw it
+      if (checkError && checkError.code !== 'PGRST116') {
+        throw new Error(checkError.message)
+      }
 
       if (existingDriver) {
         throw new Error('Ya existe un conductor con este número de licencia')
@@ -252,18 +288,7 @@ export function useDrivers() {
           company_id: companyId,
           ...driverData
         }])
-        .select(`
-          *,
-          party:parties!party_id(
-            id,
-            doc_type,
-            doc_number,
-            fullname,
-            email,
-            phone,
-            address
-          )
-        `)
+        .select('*')
         .single()
 
       if (supabaseError) {
@@ -292,12 +317,17 @@ export function useDrivers() {
 
       // Validate license number uniqueness if being updated
       if (updateData.license_number) {
-        const { data: existingDriver } = await supabase
+        const { data: existingDriver, error: checkError } = await supabase
           .from('drivers')
           .select('id, company_id')
           .eq('license_number', updateData.license_number)
           .neq('id', id)
-          .single()
+          .maybeSingle()
+
+        // If there's an error other than "no rows found", throw it
+        if (checkError && checkError.code !== 'PGRST116') {
+          throw new Error(checkError.message)
+        }
 
         if (existingDriver) {
           throw new Error('Ya existe un conductor con este número de licencia')
@@ -381,26 +411,24 @@ export function useDrivers() {
   // Get available drivers (not assigned to a specific vehicle or can be assigned to multiple)
   const getAvailableDrivers = async (companyId: string, excludeVehicleId?: string) => {
     try {
-      let query = `
-        *,
-        party:parties!party_id(
-          fullname,
-          doc_number
-        ),
-        vehicle_assignments:vehicle_drivers(
-          vehicle_id,
-          is_primary,
-          vehicle:vehicles!vehicle_id(
-            plate
-          )
-        )
-      `
-
       const { data, error: supabaseError } = await supabase
         .from('drivers')
-        .select(query)
+        .select(`
+          *,
+          party:parties!party_id(
+            fullname,
+            doc_number
+          ),
+          vehicle_assignments:vehicle_drivers(
+            vehicle_id,
+            is_primary,
+            vehicle:vehicles(
+              plate
+            )
+          )
+        `)
         .eq('company_id', companyId)
-        .order('nombre_completo')
+        .order('party(fullname)')
 
       if (supabaseError) {
         throw new Error(supabaseError.message)
@@ -409,7 +437,7 @@ export function useDrivers() {
       // Filter out drivers assigned to the excluded vehicle if specified
       let availableDrivers = data || []
       if (excludeVehicleId) {
-        availableDrivers = availableDrivers.filter((driver: any) => 
+        availableDrivers = availableDrivers.filter((driver: any) =>
           !driver.vehicle_assignments?.some((va: any) => va.vehicle_id === excludeVehicleId)
         )
       }
@@ -451,11 +479,9 @@ export function useDrivers() {
   const getCurrentUserLocation = async (userId: string) => {
     try {
       const { data, error: supabaseError } = await supabase
-        .from('device_locations')
+        .from('recent_device_locations')
         .select('*')
         .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(1)
         .single()
 
       if (supabaseError && supabaseError.code !== 'PGRST116') {
@@ -477,19 +503,23 @@ export function useDrivers() {
     longitude: number
     accuracy_meters?: number | null
     altitude_meters?: number | null
-    speed_kph?: number | null
+    speed_mps?: number | null
     heading_degrees?: number | null
     battery_level?: number | null
-    network_type?: string | null
-    signal_strength?: number | null
-    is_mock_location?: boolean
-    activity_type?: string | null
-    activity_confidence?: number | null
+    source?: string
+    context?: string
+    activity?: string
+    session_id?: string
+    app_version?: string
+    device_timestamp: string
   }) => {
     try {
       const { data, error: supabaseError } = await supabase
         .from('device_locations')
-        .insert([locationData])
+        .insert([{
+          ...locationData,
+          server_timestamp: new Date().toISOString()
+        }])
         .select()
         .single()
 

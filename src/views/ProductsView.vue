@@ -105,6 +105,10 @@
               <Filter class="mr-2 h-4 w-4" />
               Filtros
             </Button>
+            <Button variant="outline" size="sm" @click="showLocationAssignerDialog = true">
+              <MapPin class="mr-2 h-4 w-4" />
+              Asignar Ubicaciones
+            </Button>
           </div>
         </CardTitle>
       </CardHeader>
@@ -647,6 +651,17 @@
                   <span class="text-sm text-muted-foreground">Reservado:</span>
                   <span class="font-medium text-orange-600">{{ selectedProduct.reserved_stock || 0 }}</span>
                 </div>
+                <div class="mt-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    @click="showProductLocations(selectedProduct.id || selectedProduct.product_id)"
+                    class="w-full"
+                  >
+                    <Package class="mr-2 h-4 w-4" />
+                    Ver Ubicaciones
+                  </Button>
+                </div>
               </CardContent>
             </Card>
 
@@ -687,6 +702,72 @@
               </CardContent>
             </Card>
           </div>
+
+          <!-- Purchase Prices Section -->
+          <Card>
+            <CardHeader>
+              <CardTitle class="text-base flex items-center justify-between">
+                <span>Precios de Compra</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  @click="loadPurchasePrices(selectedProduct.id || selectedProduct.product_id)"
+                  :disabled="loadingPurchasePrices"
+                >
+                  <Loader2 v-if="loadingPurchasePrices" class="h-4 w-4 animate-spin" />
+                  <Eye v-else class="h-4 w-4" />
+                  Actualizar
+                </Button>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div v-if="loadingPurchasePrices" class="text-center py-6">
+                <Loader2 class="h-6 w-6 animate-spin mx-auto" />
+                <p class="text-muted-foreground mt-2 text-sm">Cargando precios...</p>
+              </div>
+              <div v-else-if="purchasePrices.length === 0" class="text-center py-6">
+                <Package class="h-12 w-12 text-muted-foreground mx-auto mb-2" />
+                <p class="text-muted-foreground text-sm">No hay precios de compra registrados</p>
+              </div>
+              <div v-else class="space-y-3">
+                <div
+                  v-for="price in purchasePrices.slice(0, 5)"
+                  :key="price.id"
+                  class="flex items-center justify-between p-3 bg-muted/30 rounded-lg"
+                >
+                  <div class="flex-1">
+                    <div class="flex items-center gap-2">
+                      <span class="text-sm font-medium">
+                        {{ formatCurrency(price.unit_price, price.currency_code) }}
+                      </span>
+                      <Badge variant="outline" class="text-xs">
+                        {{ price.currency_code }}
+                      </Badge>
+                    </div>
+                    <div class="text-xs text-muted-foreground mt-1">
+                      <span v-if="price.supplier_name">{{ price.supplier_name }}</span>
+                      <span v-if="price.source_doc_type && price.source_doc_series && price.source_doc_number">
+                        - {{ price.source_doc_type }}-{{ price.source_doc_series }}-{{ price.source_doc_number }}
+                      </span>
+                    </div>
+                  </div>
+                  <div class="text-right text-xs text-muted-foreground">
+                    {{ formatDate(price.observed_at) }}
+                  </div>
+                </div>
+                <div v-if="purchasePrices.length > 5" class="text-center">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    @click="showAllPurchasePrices = true"
+                    class="text-xs"
+                  >
+                    Ver todos ({{ purchasePrices.length }})
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         <DialogFooter>
@@ -895,6 +976,399 @@
         </form>
       </DialogContent>
     </Dialog>
+
+    <!-- Product Locations Dialog -->
+    <Dialog v-model:open="showLocationDialog">
+      <DialogContent class="max-w-6xl" v-slot="{ close }">
+        <DialogHeader>
+          <DialogTitle>Ubicaciones del Producto</DialogTitle>
+        </DialogHeader>
+
+        <div v-if="currentProductLocations.length === 0 && !locationTracking.loading" class="text-center py-8">
+          <Package class="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+          <p class="text-muted-foreground">Este producto no tiene ubicaciones asignadas</p>
+          <Button
+            class="mt-4"
+            @click="showCreateLocationDialog = true"
+            v-if="selectedProductId"
+          >
+            <Plus class="mr-2 h-4 w-4" />
+            Asignar Ubicación
+          </Button>
+        </div>
+
+        <div v-else-if="locationTracking.loading" class="text-center py-8">
+          <Loader2 class="h-6 w-6 animate-spin mx-auto" />
+          <p class="text-muted-foreground mt-2">Cargando ubicaciones...</p>
+        </div>
+
+        <div v-else class="space-y-6">
+          <!-- Locations Grid -->
+          <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <Card
+              v-for="location in currentProductLocations"
+              :key="location.id"
+              class="relative"
+              :class="{ 'ring-2 ring-primary': location.es_principal }"
+            >
+              <CardHeader class="pb-3">
+                <div class="flex items-center justify-between">
+                  <CardTitle class="text-sm">
+                    {{ location.warehouse_name }}
+                  </CardTitle>
+                  <div class="flex items-center gap-2">
+                    <Badge
+                      v-if="location.es_principal"
+                      variant="default"
+                      class="text-xs"
+                    >
+                      Principal
+                    </Badge>
+                    <Badge
+                      :variant="location.stock_actual > 0 ? 'success' : 'outline'"
+                      class="text-xs"
+                    >
+                      {{ location.stock_actual }} unidades
+                    </Badge>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent class="space-y-3">
+                <div class="text-sm space-y-1">
+                  <div class="flex justify-between">
+                    <span class="text-muted-foreground">Zona:</span>
+                    <span class="font-medium">{{ location.zone_code }}</span>
+                  </div>
+                  <div v-if="location.aisle_code" class="flex justify-between">
+                    <span class="text-muted-foreground">Pasillo:</span>
+                    <span class="font-medium">{{ location.aisle_code }}</span>
+                  </div>
+                  <div v-if="location.shelf_code" class="flex justify-between">
+                    <span class="text-muted-foreground">Estante:</span>
+                    <span class="font-medium">{{ location.shelf_code }}</span>
+                  </div>
+                  <div v-if="location.shelf_position_code" class="flex justify-between">
+                    <span class="text-muted-foreground">Posición:</span>
+                    <code class="bg-muted px-1 py-0.5 rounded text-xs">{{ location.shelf_position_code }}</code>
+                  </div>
+                  <div v-if="location.capacity_max" class="flex justify-between">
+                    <span class="text-muted-foreground">Capacidad:</span>
+                    <span class="font-medium">{{ location.capacity_max }}</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-muted-foreground">Prioridad:</span>
+                    <span class="font-medium">{{ location.location_priority }}</span>
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-2 pt-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    @click="openMoveProductDialog(location)"
+                    class="flex-1"
+                  >
+                    <Package class="mr-2 h-3 w-3" />
+                    Mover
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    @click="updateStock(location)"
+                    class="flex-1"
+                  >
+                    <Edit class="mr-2 h-3 w-3" />
+                    Stock
+                  </Button>
+                  <Button
+                    v-if="!location.es_principal"
+                    variant="outline"
+                    size="sm"
+                    @click="setPrimaryLocation(location.id)"
+                  >
+                    <Eye class="h-3 w-3" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <!-- Movement History -->
+          <Card>
+            <CardHeader>
+              <CardTitle class="text-base flex items-center justify-between">
+                <span>Historial de Movimientos</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  @click="refreshLocationHistory"
+                  :disabled="locationTracking.loading"
+                >
+                  <Loader2 v-if="locationTracking.loading" class="h-4 w-4 animate-spin" />
+                  <Eye v-else class="h-4 w-4" />
+                  Actualizar
+                </Button>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div v-if="currentLocationHistory.length === 0" class="text-center py-6 text-muted-foreground">
+                No hay movimientos registrados
+              </div>
+              <div v-else class="space-y-3">
+                <div
+                  v-for="movement in currentLocationHistory.slice(0, 10)"
+                  :key="movement.id"
+                  class="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
+                >
+                  <div class="flex-1">
+                    <div class="flex items-center gap-2">
+                      <Badge
+                        :variant="getMovementVariant(movement.movement_type)"
+                        class="text-xs"
+                      >
+                        {{ getMovementLabel(movement.movement_type) }}
+                      </Badge>
+                      <span class="text-sm font-medium">{{ movement.quantity }} unidades</span>
+                    </div>
+                    <div class="text-xs text-muted-foreground mt-1">
+                      <span v-if="movement.from_zone?.code && movement.to_zone?.code">
+                        {{ movement.from_zone.code }} → {{ movement.to_zone.code }}
+                      </span>
+                      <span v-else-if="movement.to_zone?.code">
+                        → {{ movement.to_zone.code }}
+                      </span>
+                      <span v-else-if="movement.from_zone?.code">
+                        {{ movement.from_zone.code }} →
+                      </span>
+                    </div>
+                  </div>
+                  <div class="text-right text-xs text-muted-foreground">
+                    {{ formatDate(movement.moved_at) }}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" @click="showLocationDialog = false">
+            Cerrar
+          </Button>
+          <Button
+            @click="showCreateLocationDialog = true"
+            v-if="selectedProductId"
+          >
+            <Plus class="mr-2 h-4 w-4" />
+            Nueva Ubicación
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Create Location Dialog -->
+    <Dialog v-model:open="showCreateLocationDialog">
+      <DialogContent class="max-w-lg" v-slot="{ close }">
+        <DialogHeader>
+          <DialogTitle>Asignar Nueva Ubicación</DialogTitle>
+        </DialogHeader>
+
+        <form @submit.prevent="createProductLocation" class="space-y-4">
+          <div>
+            <label class="text-sm font-medium">Almacén</label>
+            <select
+              v-model="locationForm.warehouse_id"
+              @change="onWarehouseChange"
+              class="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              required
+            >
+              <option value="">Seleccionar almacén</option>
+              <option
+                v-for="warehouse in warehouseManager.warehouses"
+                :key="warehouse.id"
+                :value="warehouse.id"
+              >
+                {{ warehouse.name }}
+              </option>
+            </select>
+          </div>
+
+          <div v-if="filteredZones.length > 0">
+            <label class="text-sm font-medium">Zona</label>
+            <select
+              v-model="locationForm.warehouse_zone_id"
+              @change="onZoneChange"
+              class="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              required
+            >
+              <option value="">Seleccionar zona</option>
+              <option
+                v-for="zone in filteredZones"
+                :key="zone.id"
+                :value="zone.id"
+              >
+                {{ zone.code }} - {{ zone.name }}
+              </option>
+            </select>
+          </div>
+
+          <div v-if="filteredShelfPositions.length > 0">
+            <label class="text-sm font-medium">Posición Específica (Opcional)</label>
+            <select
+              v-model="locationForm.warehouse_shelf_position_id"
+              class="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="">Sin posición específica</option>
+              <option
+                v-for="position in filteredShelfPositions"
+                :key="position.id"
+                :value="position.id"
+              >
+                {{ position.location_code }}
+              </option>
+            </select>
+          </div>
+
+          <div class="grid gap-4 md:grid-cols-2">
+            <div>
+              <label class="text-sm font-medium">Stock Inicial</label>
+              <Input
+                v-model.number="locationForm.stock_actual"
+                type="number"
+                min="0"
+                step="0.01"
+                required
+                class="mt-1"
+              />
+            </div>
+
+            <div>
+              <label class="text-sm font-medium">Capacidad Máxima</label>
+              <Input
+                v-model.number="locationForm.capacity_max"
+                type="number"
+                min="0"
+                step="0.01"
+                class="mt-1"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label class="text-sm font-medium">Prioridad (1-10)</label>
+            <Input
+              v-model.number="locationForm.location_priority"
+              type="number"
+              min="1"
+              max="10"
+              required
+              class="mt-1"
+            />
+          </div>
+
+          <div class="flex items-center space-x-2">
+            <input
+              id="es_principal"
+              type="checkbox"
+              v-model="locationForm.es_principal"
+              class="rounded border-gray-300"
+            />
+            <label for="es_principal" class="text-sm font-medium">Ubicación principal</label>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" @click="showCreateLocationDialog = false">
+              Cancelar
+            </Button>
+            <Button type="submit" :disabled="locationTracking.loading">
+              Crear Ubicación
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+
+    <!-- All Purchase Prices Dialog -->
+    <Dialog v-model:open="showAllPurchasePrices">
+      <DialogContent class="max-w-4xl">
+        <DialogHeader>
+          <DialogTitle>Historial Completo de Precios de Compra</DialogTitle>
+        </DialogHeader>
+
+        <div class="space-y-4">
+          <div v-if="purchasePrices.length === 0" class="text-center py-8">
+            <Package class="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+            <p class="text-muted-foreground">No hay precios de compra registrados</p>
+          </div>
+          <div v-else>
+            <div class="grid gap-3">
+              <div
+                v-for="price in purchasePrices"
+                :key="price.id"
+                class="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+              >
+                <div class="flex-1">
+                  <div class="flex items-center gap-3">
+                    <div>
+                      <div class="flex items-center gap-2">
+                        <span class="text-lg font-semibold">
+                          {{ formatCurrency(price.unit_price, price.currency_code) }}
+                        </span>
+                        <Badge variant="outline">
+                          {{ price.currency_code }}
+                        </Badge>
+                      </div>
+                      <div class="text-sm text-muted-foreground mt-1">
+                        <span class="font-medium">{{ price.supplier_name }}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="mt-2 text-xs text-muted-foreground">
+                    <span v-if="price.source_doc_type && price.source_doc_series && price.source_doc_number">
+                      Documento: {{ price.source_doc_type }}-{{ price.source_doc_series }}-{{ price.source_doc_number }}
+                    </span>
+                    <span v-else>
+                      Sin documento de origen
+                    </span>
+                  </div>
+                </div>
+                <div class="text-right">
+                  <div class="text-sm font-medium">
+                    {{ new Date(price.observed_at).toLocaleDateString('es-PE') }}
+                  </div>
+                  <div class="text-xs text-muted-foreground">
+                    {{ new Date(price.created_at).toLocaleDateString('es-PE') }}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" @click="showAllPurchasePrices = false">
+            Cerrar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Location Assigner Dialog -->
+    <Dialog v-model:open="showLocationAssignerDialog">
+      <DialogContent class="max-w-7xl">
+        <DialogHeader>
+          <DialogTitle>Gestión de Ubicaciones de Productos</DialogTitle>
+        </DialogHeader>
+
+        <ProductLocationAssigner />
+
+        <DialogFooter>
+          <Button variant="outline" @click="showLocationAssignerDialog = false">
+            Cerrar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
 
@@ -904,6 +1378,9 @@ import { useCompaniesStore } from '@/stores/companies'
 import { useProductsStore, type ProductFull } from '@/stores/products'
 import { useAuthStore } from '@/stores/auth'
 import { sunatMeasurementUnitsService, type SunatCatalogItem } from '@/services/sunatService'
+import { useProductLocationTracking } from '@/composables/useProductLocationTracking'
+import { useWarehouseManager } from '@/composables/useWarehouseManager'
+import { supabase } from '@/lib/supabase'
 import {
   Download,
   Plus,
@@ -914,7 +1391,8 @@ import {
   MoreVertical,
   Loader2,
   Upload,
-  X
+  X,
+  MapPin
 } from 'lucide-vue-next'
 
 // UI Components
@@ -937,10 +1415,13 @@ import DialogHeader from '@/components/ui/DialogHeader.vue'
 import DialogTitle from '@/components/ui/DialogTitle.vue'
 import DialogFooter from '@/components/ui/DialogFooter.vue'
 import PriceDisplay from '@/components/Products/PriceDisplay.vue'
+import ProductLocationAssigner from '@/components/Products/ProductLocationAssigner.vue'
 
 const companiesStore = useCompaniesStore()
 const productsStore = useProductsStore()
 const authStore = useAuthStore()
+const locationTracking = useProductLocationTracking()
+const warehouseManager = useWarehouseManager()
 
 // State
 const showCreateProductDialog = ref(false)
@@ -949,6 +1430,30 @@ const showViewProductDialog = ref(false)
 const showEditProductDialog = ref(false)
 const selectedProduct = ref<ProductFull | null>(null)
 const editingProduct = ref(false)
+
+// Location tracking state
+const showLocationDialog = ref(false)
+const showCreateLocationDialog = ref(false)
+const showLocationAssignerDialog = ref(false)
+const selectedProductId = ref<string | null>(null)
+const currentProductLocations = ref<any[]>([])
+const currentLocationHistory = ref<any[]>([])
+
+// Location form
+const locationForm = ref({
+  warehouse_id: '',
+  warehouse_zone_id: '',
+  warehouse_shelf_position_id: '',
+  stock_actual: 0,
+  capacity_max: 0,
+  location_priority: 1,
+  es_principal: false
+})
+
+// Purchase prices state
+const purchasePrices = ref<any[]>([])
+const loadingPurchasePrices = ref(false)
+const showAllPurchasePrices = ref(false)
 
 // Filters
 const searchTerm = ref('')
@@ -1098,6 +1603,22 @@ const filteredProducts = computed(() => {
   return products
 })
 
+// Location-related computed properties
+const filteredZones = computed(() => {
+  if (!locationForm.value.warehouse_id) return []
+  return warehouseManager.zones.filter(zone => zone.warehouse_id === locationForm.value.warehouse_id)
+})
+
+const filteredShelfPositions = computed(() => {
+  if (!locationForm.value.warehouse_zone_id) return []
+  // Get aisles for the selected zone, then shelves for those aisles, then positions for those shelves
+  const aisles = warehouseManager.aisles.filter(aisle => aisle.warehouse_zone_id === locationForm.value.warehouse_zone_id)
+  const aisleIds = aisles.map(aisle => aisle.id)
+  const shelves = warehouseManager.shelves.filter(shelf => aisleIds.includes(shelf.warehouse_aisle_id))
+  const shelfIds = shelves.map(shelf => shelf.id)
+  return warehouseManager.shelfPositions.filter(position => shelfIds.includes(position.warehouse_shelf_id))
+})
+
 // Methods
 const getProductTotalStock = (productId: string) => {
   const inventory = productsStore.getProductStock(productId)
@@ -1191,9 +1712,15 @@ const exportProducts = () => {
   console.log('Export products')
 }
 
-const viewProduct = (product: ProductFull) => {
+const viewProduct = async (product: ProductFull) => {
   selectedProduct.value = product
   showViewProductDialog.value = true
+
+  // Automatically load purchase prices when viewing a product
+  const productId = product.id || product.product_id
+  if (productId) {
+    await loadPurchasePrices(productId)
+  }
 }
 
 const editProduct = (product: ProductFull) => {
@@ -1277,6 +1804,193 @@ const resetAdvancedFilters = () => {
   }
 }
 
+// Location tracking methods
+const showProductLocations = async (productId: string) => {
+  selectedProductId.value = productId
+  showLocationDialog.value = true
+
+  if (!companiesStore.currentCompany) return
+
+  try {
+    // Load detailed locations for this product
+    const locations = await locationTracking.fetchDetailedLocations(
+      companiesStore.currentCompany.id,
+      { product_id: productId }
+    )
+    currentProductLocations.value = locations || []
+
+    // Load location history
+    const history = await locationTracking.fetchLocationHistory(productId)
+    currentLocationHistory.value = history || []
+  } catch (error) {
+    console.error('Error loading product locations:', error)
+  }
+}
+
+const refreshLocationHistory = async () => {
+  if (!selectedProductId.value) return
+
+  try {
+    const history = await locationTracking.fetchLocationHistory(selectedProductId.value)
+    currentLocationHistory.value = history || []
+  } catch (error) {
+    console.error('Error refreshing location history:', error)
+  }
+}
+
+const onWarehouseChange = async () => {
+  locationForm.value.warehouse_zone_id = ''
+  locationForm.value.warehouse_shelf_position_id = ''
+
+  if (!locationForm.value.warehouse_id || !companiesStore.currentCompany) return
+
+  // Load zones for selected warehouse
+  await warehouseManager.fetchZones(companiesStore.currentCompany.id, locationForm.value.warehouse_id)
+}
+
+const onZoneChange = async () => {
+  locationForm.value.warehouse_shelf_position_id = ''
+
+  if (!locationForm.value.warehouse_zone_id || !companiesStore.currentCompany) return
+
+  // Load aisles and shelves for selected zone
+  await Promise.all([
+    warehouseManager.fetchAisles(companiesStore.currentCompany.id, locationForm.value.warehouse_zone_id),
+    warehouseManager.fetchShelves(companiesStore.currentCompany.id),
+    warehouseManager.fetchShelfPositions(companiesStore.currentCompany.id)
+  ])
+}
+
+const createProductLocation = async () => {
+  if (!selectedProductId.value || !companiesStore.currentCompany) return
+
+  try {
+    const locationData = {
+      product_id: selectedProductId.value,
+      warehouse_id: locationForm.value.warehouse_id,
+      warehouse_zone_id: locationForm.value.warehouse_zone_id,
+      warehouse_shelf_position_id: locationForm.value.warehouse_shelf_position_id || undefined,
+      stock_actual: locationForm.value.stock_actual,
+      capacity_max: locationForm.value.capacity_max || undefined,
+      location_priority: locationForm.value.location_priority,
+      es_principal: locationForm.value.es_principal,
+      estado: true
+    }
+
+    await locationTracking.createProductLocation(locationData)
+
+    // Refresh locations
+    await showProductLocations(selectedProductId.value)
+
+    // Close dialog and reset form
+    showCreateLocationDialog.value = false
+    resetLocationForm()
+  } catch (error) {
+    console.error('Error creating product location:', error)
+  }
+}
+
+const resetLocationForm = () => {
+  locationForm.value = {
+    warehouse_id: '',
+    warehouse_zone_id: '',
+    warehouse_shelf_position_id: '',
+    stock_actual: 0,
+    capacity_max: 0,
+    location_priority: 1,
+    es_principal: false
+  }
+}
+
+const setPrimaryLocation = async (locationId: string) => {
+  if (!selectedProductId.value) return
+
+  try {
+    await locationTracking.setPrimaryLocation(locationId, selectedProductId.value)
+    // Refresh locations to show updated primary status
+    await showProductLocations(selectedProductId.value)
+  } catch (error) {
+    console.error('Error setting primary location:', error)
+  }
+}
+
+const openMoveProductDialog = (location: any) => {
+  // TODO: Implement move product dialog
+  console.log('Move product from location:', location)
+}
+
+const updateStock = (location: any) => {
+  // TODO: Implement stock update dialog
+  console.log('Update stock for location:', location)
+}
+
+const getMovementVariant = (type: string) => {
+  switch (type) {
+    case 'RECEIPT': return 'success'
+    case 'SHIPMENT': return 'destructive'
+    case 'TRANSFER': return 'default'
+    case 'ADJUSTMENT': return 'warning'
+    default: return 'outline'
+  }
+}
+
+const getMovementLabel = (type: string) => {
+  switch (type) {
+    case 'RECEIPT': return 'Recepción'
+    case 'SHIPMENT': return 'Envío'
+    case 'TRANSFER': return 'Transferencia'
+    case 'ADJUSTMENT': return 'Ajuste'
+    default: return type
+  }
+}
+
+const formatDate = (dateString: string) => {
+  return new Date(dateString).toLocaleDateString('es-PE', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+// Purchase prices methods
+const loadPurchasePrices = async (productId: string) => {
+  if (!companiesStore.currentCompany) return
+
+  try {
+    loadingPurchasePrices.value = true
+
+    const { data, error } = await supabase
+      .from('product_purchase_prices')
+      .select(`
+        *,
+        supplier:parties!supplier_id(
+          id,
+          fullname
+        )
+      `)
+      .eq('company_id', companiesStore.currentCompany.id)
+      .eq('product_id', productId)
+      .order('observed_at', { ascending: false })
+      .limit(50)
+
+    if (error) throw error
+
+    // Transform the data to include supplier name
+    purchasePrices.value = (data || []).map(price => ({
+      ...price,
+      supplier_name: price.supplier?.fullname || 'Proveedor no especificado'
+    }))
+
+  } catch (error) {
+    console.error('Error loading purchase prices:', error)
+    purchasePrices.value = []
+  } finally {
+    loadingPurchasePrices.value = false
+  }
+}
+
 onMounted(async () => {
   try {
     // Ensure companies are loaded
@@ -1299,7 +2013,8 @@ onMounted(async () => {
         productsStore.fetchWarehouses(companiesStore.currentCompany.id),
         productsStore.fetchPriceLists(companiesStore.currentCompany.id),
         productsStore.fetchInventoryItems(companiesStore.currentCompany.id),
-        loadMeasurementUnits()
+        loadMeasurementUnits(),
+        warehouseManager.initializeWarehouseData(companiesStore.currentCompany.id)
       ])
 
       // Set default price list (first one found) and load products

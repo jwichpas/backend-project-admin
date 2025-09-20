@@ -37,6 +37,7 @@
         </Button>
       </div>
 
+
       <!-- Filters -->
       <div class="flex flex-wrap items-center gap-4 flex-1">
         <!-- Warehouse Selector -->
@@ -134,10 +135,18 @@
     <!-- Main Visualization Area -->
     <div class="bg-card border border-border rounded-lg overflow-hidden" :class="{
       'min-h-[600px]': viewMode === 'table',
-      'min-h-[calc(100vh-200px)] h-[calc(100vh-200px)]': viewMode === '2d' || viewMode === '3d'
+      'p-0 bg-transparent border-0': viewMode === 'cards'
     }">
+      <!-- Cards View -->
+      <WarehouseCardView
+        v-if="viewMode === 'cards'"
+        :warehouse-data="warehouseData"
+        :filtered-locations="filteredLocations"
+        :loading="loading"
+      />
+
       <!-- Table View -->
-      <div v-if="viewMode === 'table'" class="p-6">
+      <div v-else-if="viewMode === 'table'" class="p-6">
         <div class="overflow-x-auto">
           <table class="min-w-full divide-y divide-border">
             <thead class="bg-muted/50">
@@ -222,21 +231,6 @@
         </div>
       </div>
 
-      <!-- 2D View -->
-      <Warehouse2DView
-        v-else-if="viewMode === '2d'"
-        :warehouse-data="selectedWarehouseData"
-        :filtered-locations="filteredLocations"
-        :loading="loading"
-      />
-
-      <!-- 3D View -->
-      <Warehouse3DView
-        v-else-if="viewMode === '3d'"
-        :warehouse-data="selectedWarehouseData"
-        :filtered-locations="filteredLocations"
-        :loading="loading"
-      />
     </div>
 
     <!-- Location Selector Modal -->
@@ -375,14 +369,12 @@ import {
   Eye,
   X,
   Table,
-  Square,
-  Box,
   Warehouse,
   Layers,
   Package,
   Navigation,
   Boxes,
-  Building
+  Grid3x3
 } from 'lucide-vue-next'
 
 // UI Components
@@ -390,8 +382,7 @@ import Button from '@/components/ui/Button.vue'
 import Modal from '@/components/ui/Modal.vue'
 
 // Warehouse Components
-import Warehouse2DView from '@/components/warehouse/Warehouse2DView.vue'
-import Warehouse3DView from '@/components/warehouse/Warehouse3DView.vue'
+import WarehouseCardView from '@/components/warehouse/WarehouseCardView.vue'
 import HierarchicalLocationSelector from '@/components/warehouse/HierarchicalLocationSelector.vue'
 
 const companiesStore = useCompaniesStore()
@@ -409,9 +400,8 @@ const selectedHierarchicalLocation = ref({})
 
 // View modes
 const viewModes = [
-  { key: 'table', label: 'Tabla', icon: Table },
-  { key: '2d', label: 'Vista 2D', icon: Square },
-  { key: '3d', label: 'Vista 3D', icon: Box }
+  { key: 'cards', label: 'Tarjetas', icon: Grid3x3 },
+  { key: 'table', label: 'Tabla', icon: Table }
 ]
 
 // Computed properties from composables
@@ -427,10 +417,44 @@ const products = computed(() => visualizer.products.value)
 const filteredLocations = computed(() => visualizer.filteredLocations.value)
 const selectedWarehouseData = computed(() => visualizer.selectedWarehouseData.value)
 
+// Combine all warehouse data for the card view
+const warehouseData = computed(() => {
+  const selectedWarehouse = warehouses.value.find(w => w.id === selectedWarehouseId.value) || warehouses.value[0]
+  if (!selectedWarehouse) return null
+
+  // Get all zones for this warehouse from warehouse structure
+  const warehouseZones = zones.value.filter(zone => zone.warehouse_id === selectedWarehouse.id)
+
+  // Get aisles for this warehouse
+  const warehouseAisles = aisles.value.filter(aisle =>
+    warehouseZones.some(zone => zone.id === aisle.warehouse_zone_id)
+  )
+
+  // Get shelves for aisles in this warehouse
+  const warehouseShelves = shelves.value.filter(shelf =>
+    warehouseAisles.some(aisle => aisle.id === shelf.warehouse_aisle_id)
+  )
+
+  // Get shelf positions for shelves in this warehouse
+  const warehouseShelfPositions = shelfPositions.value.filter(pos =>
+    warehouseShelves.some(shelf => shelf.id === pos.warehouse_shelf_id)
+  )
+
+  return {
+    warehouse: selectedWarehouse,
+    zones: warehouseZones,
+    aisles: warehouseAisles,
+    shelves: warehouseShelves,
+    shelfPositions: warehouseShelfPositions,
+    productLocations: filteredLocations.value
+  }
+})
+
 // Local state for filters
 const selectedWarehouseId = ref('')
 const selectedProductId = ref('')
 const searchQuery = ref('')
+
 
 // Computed for location details hierarchy
 const locationHierarchy = computed(() => {
@@ -447,7 +471,7 @@ const locationHierarchy = computed(() => {
 })
 
 // Methods
-const setViewMode = (mode: 'table' | '2d' | '3d') => {
+const setViewMode = (mode: 'cards' | 'table') => {
   visualizer.setViewMode(mode)
 }
 
@@ -469,6 +493,12 @@ const refreshData = async () => {
       visualizer.initializeData(companiesStore.currentCompany.id),
       warehouseManager.initializeWarehouseData(companiesStore.currentCompany.id)
     ])
+
+    // Auto-select first warehouse if none selected
+    if (!selectedWarehouseId.value && warehouses.value.length > 0) {
+      selectedWarehouseId.value = warehouses.value[0].id
+      visualizer.setSelectedWarehouse(warehouses.value[0].id)
+    }
   }
 }
 

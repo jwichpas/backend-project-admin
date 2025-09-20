@@ -218,13 +218,15 @@ export interface Driver {
   id: string
   company_id: string
   party_id: string
+  user_id?: string | null
   license_number: string
   license_class?: string
   valid_until?: string
-  numero_documento?: string
-  nombre_completo?: string
   created_at: string
   updated_at: string
+  party?: {
+    fullname: string
+  }
 }
 
 export interface Customer {
@@ -307,6 +309,9 @@ export const useSalesStore = defineStore('sales', {
     // Customers
     customers: [] as Customer[],
 
+    // Suppliers
+    suppliers: [] as Customer[],
+
     // Products
     products: [] as Product[],
 
@@ -348,8 +353,13 @@ export const useSalesStore = defineStore('sales', {
     ),
 
     // Customers
-    activeCustomers: (state) => state.customers.filter(customer => 
+    activeCustomers: (state) => state.customers.filter(customer =>
       customer.is_active
+    ),
+
+    // Suppliers
+    activeSuppliers: (state) => state.suppliers.filter(supplier =>
+      supplier.is_active
     ),
 
     // Products
@@ -823,7 +833,7 @@ export const useSalesStore = defineStore('sales', {
             warehouses(name),
             sales_docs(series, number),
             vehicles(plate),
-            drivers(nombre_completo)
+            drivers(party:parties!party_id(fullname))
           `)
           .eq('company_id', companyId)
           .order('created_at', { ascending: false })
@@ -839,7 +849,7 @@ export const useSalesStore = defineStore('sales', {
           warehouse_name: item.warehouses?.name,
           sales_doc_number: item.sales_docs ? `${item.sales_docs.series}-${item.sales_docs.number}` : undefined,
           vehicle_plate: item.vehicles?.plate,
-          driver_name: item.drivers?.nombre_completo
+          driver_name: item.drivers?.party?.fullname
         })) || []
       } catch (error: any) {
         this.error = error.message
@@ -1103,6 +1113,51 @@ export const useSalesStore = defineStore('sales', {
       }
     },
 
+    async fetchSuppliers(companyId: string) {
+      this.loading = true
+      this.error = null
+      console.log('Fetching suppliers for company:', companyId)
+      try {
+        const { data, error } = await supabase
+          .from('parties')
+          .select('*, fullname')
+          .eq('company_id', companyId)
+          .eq('is_supplier', true)
+          .order('fullname', { ascending: true })
+
+        if (error) {
+          console.error('Supabase error fetching suppliers:', error)
+          throw error
+        }
+
+        // Map data to match expected Supplier interface
+        this.suppliers = data?.map(item => ({
+          id: item.id,
+          company_id: item.company_id,
+          party_type: 'SUPPLIER',
+          doc_type: item.doc_type,
+          doc_number: item.doc_number,
+          name: item.fullname || item.razon_social,
+          fullname: item.fullname,
+          razon_social: item.razon_social,
+          email: item.email,
+          phone: item.phone,
+          address: item.address,
+          is_active: !item.deleted_at,
+          is_supplier: true,
+          created_at: item.created_at,
+          updated_at: item.updated_at
+        })) || []
+
+        console.log('Suppliers fetched:', this.suppliers.length, 'records')
+      } catch (error: any) {
+        this.error = error.message
+        console.error('Error fetching suppliers:', error)
+      } finally {
+        this.loading = false
+      }
+    },
+
     // ========================================================================
     // WAREHOUSES, VEHICLES, DRIVERS
     // ========================================================================
@@ -1166,9 +1221,12 @@ export const useSalesStore = defineStore('sales', {
       try {
         const { data, error } = await supabase
           .from('drivers')
-          .select('*')
+          .select(`
+            *,
+            party:parties!party_id(fullname)
+          `)
           .eq('company_id', companyId)
-          .order('nombre_completo', { ascending: true })
+          .order('party(fullname)', { ascending: true })
 
         if (error) {
           console.error('Supabase error fetching drivers:', error)

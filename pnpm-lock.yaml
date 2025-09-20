@@ -32,6 +32,9 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
+      konva:
+        specifier: ^10.0.2
+        version: 10.0.2
       lucide-vue-next:
         specifier: ^0.542.0
         version: 0.542.0(vue@3.5.21(typescript@5.8.3))
@@ -59,6 +62,9 @@ importers:
       vue-chartjs:
         specifier: ^5.3.2
         version: 5.3.2(chart.js@4.5.0)(vue@3.5.21(typescript@5.8.3))
+      vue-konva:
+        specifier: ^3.2.6
+        version: 3.2.6(konva@10.0.2)(vue@3.5.21(typescript@5.8.3))
       vue-router:
         specifier: ^4.5.1
         version: 4.5.1(vue@3.5.21(typescript@5.8.3))
@@ -1905,6 +1911,9 @@ packages:
   kolorist@1.8.0:
     resolution: {integrity: sha512-Y+60/zizpJ3HRH8DCss+q95yr6145JXZo46OTpFvDZWLfRCE4qChOyk1b26nMaNpfHHgxagk9dXT5OP0Tfe+dQ==}
 
+  konva@10.0.2:
+    resolution: {integrity: sha512-NrZED6YG5BX5h3Xu8EZgLqhQ/+ZhxANYXmlIhMOfpBf+0ToExcdwE+Y46LyJOO/JR7FVeR3YTqon3eirnuo44A==}
+
   lerc@3.0.0:
     resolution: {integrity: sha512-Rm4J/WaHhRa93nCN2mwWDZFoRVF18G1f47C+kvQWyHGEZxFpTUi73p7lMVSAndyxGt6lJ2/CFbOcf9ra5p8aww==}
 
@@ -2689,6 +2698,13 @@ packages:
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
     peerDependencies:
       eslint: ^8.57.0 || ^9.0.0
+
+  vue-konva@3.2.6:
+    resolution: {integrity: sha512-QtiM/BYHs4gyRqhg6w0lHYGONb936qD5PeGpSFFnFzTLcOaHXd3EAas2PafrWbcILdHAUNm+0j7+djJw6g6XCw==}
+    engines: {node: '>= 4.0.0', npm: '>= 3.0.0'}
+    peerDependencies:
+      konva: '>7'
+      vue: ^3
 
   vue-router@4.5.1:
     resolution: {integrity: sha512-ogAF3P97NPm8fJsE4by9dwSYtDwXIY1nFY9T6DyQnGHd1E2Da94w9JIolpe42LJGIl0DwOHBi8TcRPlPGwbTtw==}
@@ -4623,6 +4639,8 @@ snapshots:
 
   kolorist@1.8.0: {}
 
+  konva@10.0.2: {}
+
   lerc@3.0.0: {}
 
   levn@0.4.1:
@@ -5349,6 +5367,11 @@ snapshots:
       semver: 7.7.2
     transitivePeerDependencies:
       - supports-color
+
+  vue-konva@3.2.6(konva@10.0.2)(vue@3.5.21(typescript@5.8.3)):
+    dependencies:
+      konva: 10.0.2
+      vue: 3.5.21(typescript@5.8.3)
 
   vue-router@4.5.1(vue@3.5.21(typescript@5.8.3)):
     dependencies:

@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Mapa 2D del Almacén</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/@popperjs/core@2"></script>
+  <script src="https://unpkg.com/tippy.js@6"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen p-8">
+
+  <header class="mb-8">
+    <h1 class="text-3xl font-bold text-gray-800">📦 Mapa 2D del Almacén</h1>
+    <p class="text-gray-500">Visualización de zonas, pasillos, estantes y posiciones</p>
+  </header>
+
+  <!-- Contenedor de Zonas -->
+  <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+
+    <!-- Tarjeta Zona -->
+    <div class="bg-white rounded-2xl shadow-lg border border-gray-200 hover:shadow-xl transition p-6">
+      <!-- Header Zona -->
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-lg font-semibold text-gray-700">Zona A</h2>
+        <span class="px-2 py-1 text-xs rounded-full bg-rose-100 text-rose-600">65% ocupado</span>
+      </div>
+
+      <!-- Barra de ocupación -->
+      <div class="w-full bg-gray-200 rounded-full h-2 mb-4">
+        <div class="bg-rose-500 h-2 rounded-full" style="width:65%"></div>
+      </div>
+
+      <!-- Pasillo -->
+      <div class="space-y-6">
+        <div>
+          <h3 class="text-sm font-bold text-gray-600 mb-2">Pasillo A1</h3>
+          <div class="flex gap-6">
+            
+            <!-- Shelf -->
+            <div class="bg-gray-50 rounded-lg p-3 border border-gray-200 shadow-sm">
+              <span class="block text-xs text-gray-500 mb-2 text-center">Estante 1</span>
+              <div class="grid grid-cols-5 gap-1">
+                <div class="w-8 h-8 rounded-md bg-emerald-500 text-white text-[10px] flex items-center justify-center cursor-pointer hover:scale-105 transition" data-tippy-content="Libre - A1-1">1</div>
+                <div class="w-8 h-8 rounded-md bg-rose-500 text-white text-[10px] flex items-center justify-center cursor-pointer hover:scale-105 transition" data-tippy-content="Ocupado - Producto: Leche Gloria 1L (Stock 120)">2</div>
+                <div class="w-8 h-8 rounded-md bg-emerald-500"></div>
+                <div class="w-8 h-8 rounded-md bg-amber-400" data-tippy-content="Reservado - mantenimiento">4</div>
+                <div class="w-8 h-8 rounded-md bg-emerald-500"></div>
+              </div>
+            </div>
+
+            <!-- Shelf 2 -->
+            <div class="bg-gray-50 rounded-lg p-3 border border-gray-200 shadow-sm">
+              <span class="block text-xs text-gray-500 mb-2 text-center">Estante 2</span>
+              <div class="grid grid-cols-5 gap-1">
+                <div class="w-8 h-8 rounded-md bg-emerald-500"></div>
+                <div class="w-8 h-8 rounded-md bg-rose-500"></div>
+                <div class="w-8 h-8 rounded-md bg-emerald-500"></div>
+                <div class="w-8 h-8 rounded-md bg-emerald-500"></div>
+                <div class="w-8 h-8 rounded-md bg-emerald-500"></div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    tippy('[data-tippy-content]', {
+      theme: 'light-border',
+      animation: 'scale',
+      placement: 'top',
+    });
+  </script>
+</body>
+</html>

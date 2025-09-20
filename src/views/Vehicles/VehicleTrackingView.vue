@@ -1230,6 +1230,31 @@ watch(isUserTracking, (newTracking) => {
   console.log('User tracking status changed:', newTracking)
 })
 
+// Watch for company changes
+watch(
+  () => companiesStore.currentCompany,
+  async (newCompany, oldCompany) => {
+    if (newCompany && oldCompany && newCompany.id !== oldCompany.id) {
+      console.log('Company changed in VehicleTrackingView, reloading data...', {
+        from: oldCompany.id,
+        to: newCompany.id
+      })
+      await refreshData()
+      await nextTick(() => {
+        updateMapMarkers()
+      })
+
+      // Restart realtime tracking if it was enabled
+      if (realtimeEnabled.value) {
+        toggleRealtimeTracking() // Disable
+        setTimeout(() => {
+          toggleRealtimeTracking() // Re-enable with new company
+        }, 100)
+      }
+    }
+  }, { deep: true }
+)
+
 // Lifecycle
 onMounted(async () => {
   await refreshData()
