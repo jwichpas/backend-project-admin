@@ -114,14 +114,19 @@ let searchTimeout: number | null = null
 // Computed
 const filteredOptions = computed(() => {
   if (!props.allowSearch || !searchQuery.value.trim()) {
-    return props.options
+    return props.options || []
   }
-  
+
   const query = searchQuery.value.toLowerCase().trim()
-  return props.options.filter(option => 
-    getOptionLabel(option).toLowerCase().includes(query) ||
-    (props.descriptionKey && getOptionDescription(option)?.toLowerCase().includes(query))
-  )
+  return (props.options || []).filter(option => {
+    const label = getOptionLabel(option)
+    const description = props.descriptionKey ? getOptionDescription(option) : ''
+
+    return (
+      (label && label.toLowerCase().includes(query)) ||
+      (description && description.toLowerCase().includes(query))
+    )
+  })
 })
 
 const selectedOption = computed(() => {
@@ -135,7 +140,10 @@ const getOptionValue = (option: any): string => {
 }
 
 const getOptionLabel = (option: any): string => {
-  return typeof option === 'object' ? option[props.labelKey] : option
+  if (typeof option === 'object') {
+    return option[props.labelKey] || ''
+  }
+  return option || ''
 }
 
 const getOptionDescription = (option: any): string => {

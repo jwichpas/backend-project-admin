@@ -37,6 +37,17 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  --oslo-gray-50: 0 0% 95%;
+  --oslo-gray-100: 240 1% 86%;
+  --oslo-gray-200: 300 1% 74%;
+  --oslo-gray-300: 240 1% 64%;
+  --oslo-gray-400: 270 1% 55%;
+  --oslo-gray-500: 270 1% 48%;
+  --oslo-gray-600: 270 1% 40%;
+  --oslo-gray-700: 270 1% 31%;
+  --oslo-gray-800: 300 1% 21%;
+  --oslo-gray-900: 300 2% 12%;
+  --oslo-gray-950: 0 0% 7%;
 }
 
 .dark {

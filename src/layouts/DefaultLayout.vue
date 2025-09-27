@@ -263,6 +263,12 @@
             <p v-if="!isCollapsed" class="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Logística</p>
           </li>
           <li>
+            <router-link to="/despatch-guides" class="group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors" :class="getNavClass('/despatch-guides')">
+              <Send class="mr-3 h-5 w-5 transition-colors" :class="getIconClass('/despatch-guides')" />
+              <span v-if="!isCollapsed">Guías de Remisión</span>
+            </router-link>
+          </li>
+          <li>
             <div class="relative">
               <button
                 @click="toggleVehiclesMenu"
@@ -530,7 +536,7 @@ import { useProductsStore } from '@/stores/products'
 import {
   Menu, LayoutDashboard, Settings, Moon, Sun, User,
   Receipt, Users, ShoppingCart, Truck, Package, Package2, Warehouse, BarChart3,
-  Building, MapPin, FileText, ChevronDown, Bell, DollarSign, CreditCard, Car
+  Building, MapPin, FileText, ChevronDown, Bell, DollarSign, CreditCard, Car, Send
 } from 'lucide-vue-next'
 import Select from '@/components/ui/Select.vue'
 import { supabase } from '@/lib/supabase'
@@ -690,6 +696,7 @@ const getPageTitle = () => {
     'warehouse-visualizer': 'Visualizador de Almacenes',
     'customers': 'Clientes',
     'suppliers': 'Proveedores',
+    'despatch-guides': 'Guías de Remisión',
     'vehicles': 'Vehículos',
     'vehicles-drivers': 'Conductores',
     'vehicles-tracking': 'Seguimiento GPS',

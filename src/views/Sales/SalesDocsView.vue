@@ -438,6 +438,10 @@
               <FileText class="mr-2 h-4 w-4" />
               Descargar PDF
             </Button>
+            <Button variant="outline" class="w-full justify-start" @click="createDispatchGuide(selectedDoc)">
+              <Send class="mr-2 h-4 w-4" />
+              Crear Guía de Remisión
+            </Button>
           </div>
           <div class="flex justify-end gap-2 pt-4 border-t">
             <Button variant="outline" @click="showActionsDialog = false">
@@ -469,6 +473,14 @@
         </div>
       </DialogContent>
     </Dialog>
+
+    <!-- Dispatch Guide Creation Dialog -->
+    <SaleDispatchSummary
+      v-if="showDispatchDialog && selectedDoc"
+      :sale="selectedDoc"
+      @close="showDispatchDialog = false"
+      @success="handleDispatchSuccess"
+    />
   </div>
 </template>
 
@@ -488,7 +500,8 @@ import {
   MoreVertical,
   Loader2,
   Calculator,
-  Shield
+  Shield,
+  Send
 } from 'lucide-vue-next'
 
 // UI Components
@@ -508,6 +521,7 @@ import Dialog from '@/components/ui/Dialog.vue'
 import DialogContent from '@/components/ui/DialogContent.vue'
 import DialogHeader from '@/components/ui/DialogHeader.vue'
 import DialogTitle from '@/components/ui/DialogTitle.vue'
+import SaleDispatchSummary from '@/components/SaleDispatchSummary.vue'
 
 const companiesStore = useCompaniesStore()
 const salesStore = useSalesStore()
@@ -516,6 +530,7 @@ const salesStore = useSalesStore()
 const showCreateDocDialog = ref(false)
 const showDocDetailDialog = ref(false)
 const showActionsDialog = ref(false)
+const showDispatchDialog = ref(false)
 const selectedDoc = ref<any>(null)
 
 // Computed
@@ -696,6 +711,17 @@ const refreshData = async () => {
   if (companiesStore.currentCompany) {
     await salesStore.fetchSalesDocs(companiesStore.currentCompany.id)
   }
+}
+
+const createDispatchGuide = (doc: any) => {
+  selectedDoc.value = doc
+  showActionsDialog.value = false
+  showDispatchDialog.value = true
+}
+
+const handleDispatchSuccess = () => {
+  showDispatchDialog.value = false
+  // Optionally refresh data or show success message
 }
 
 // Lifecycle

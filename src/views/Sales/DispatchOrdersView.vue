@@ -700,6 +700,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useCompaniesStore } from '@/stores/companies'
 import { useSalesStore } from '@/stores/sales'
+import { useDespatchGuidesStore } from '@/stores/despatchGuides'
 import {
   Download,
   Plus,
@@ -725,6 +726,7 @@ import DialogDescription from '@/components/ui/DialogDescription.vue'
 
 const companiesStore = useCompaniesStore()
 const salesStore = useSalesStore()
+const despatchGuidesStore = useDespatchGuidesStore()
 
 // State
 const showCreateDispatchDialog = ref(false)
@@ -955,27 +957,86 @@ const viewOrder = async (order: any) => {
 
 const exportToPDF = async () => {
   if (!selectedOrder.value || !orderDetails.value) return
-  
+
   try {
-    // Create a temporary container for PDF content
-    const printContent = createPrintableContent()
-    
-    // Create a new window for printing
-    const printWindow = window.open('', '_blank')
-    if (!printWindow) return
-    
-    printWindow.document.write(printContent)
-    printWindow.document.close()
-    
-    // Wait for content to load, then print
-    setTimeout(() => {
-      printWindow.print()
-      printWindow.close()
-    }, 500)
-    
+    // Prepare data for Laravel backend
+    const salesDocs = orderDetails.value?.salesDocs || []
+
+    // Debug: Log the raw data to see what we're working with
+    console.log('🔍 Raw salesDocs data:', salesDocs)
+
+    const pdfData = {
+      id: selectedOrder.value.id,
+      status: selectedOrder.value.status,
+      planned_date: selectedOrder.value.planned_date,
+      actual_date: selectedOrder.value.actual_date,
+      warehouse_name: selectedOrder.value.warehouse_name,
+      vehicle_plate: selectedOrder.value.vehicle_plate,
+      driver_name: selectedOrder.value.driver_name,
+      summary: {
+        total_documents: salesDocs.length,
+        total_items: salesDocs.reduce((total, doc) => total + ((doc.items || doc.sales_doc_items || []).length), 0),
+        total_amount: salesDocs.reduce((total, doc) => total + (doc.total_amount || 0), 0)
+      },
+      documents: salesDocs.map((doc, index) => {
+        console.log(`📄 Document ${index}:`, doc) // Debug individual documents
+        return {
+          id: String(doc.id || `doc-${index}`),
+          series: String(doc.series || 'F001'),
+          number: String(doc.number || '00000001'),
+          issue_date: String(doc.issue_date || new Date().toISOString().split('T')[0]),
+          doc_type: String(doc.doc_type || doc.document_type || '03'), // Try both fields with default
+          total_amount: Number(doc.total_amount || 0),
+          customer_name: String(doc.customer_name || doc.customer_business_name || doc.parties?.business_name || doc.parties?.fullname || 'Cliente no especificado'),
+          items: (doc.items || doc.sales_doc_items || []).map((item, itemIndex) => ({
+            description: String(item.description || `Item ${itemIndex + 1}`),
+            quantity: Number(item.quantity || 1),
+            unit_code: String(item.unit_code || 'NIU'),
+            product_id: item.product_id ? String(item.product_id) : null
+          }))
+        }
+      })
+    }
+
+    // Debug: Log the final data being sent to Laravel
+    console.log('📤 PDF Data being sent to Laravel:', pdfData)
+
+    // Get authentication token from despatchGuides store
+    const despatchGuidesStore = useDespatchGuidesStore()
+    const token = await despatchGuidesStore.getValidToken()
+
+    // Call Laravel backend to generate PDF
+    const response = await fetch(`${import.meta.env.VITE_FACTURACION_URL}/api/dispatch-orders/pdf`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/pdf'
+      },
+      body: JSON.stringify(pdfData)
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.message || 'Error generando PDF')
+    }
+
+    // Download the PDF
+    const blob = await response.blob()
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `orden-despacho-${selectedOrder.value.id.slice(-8).toUpperCase()}.pdf`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+
+    console.log('✅ PDF generado exitosamente')
+
   } catch (error) {
-    console.error('Error exporting to PDF:', error)
-    // TODO: Show error message
+    console.error('❌ Error exportando PDF:', error)
+    alert('Error generando PDF: ' + error.message)
   }
 }
 
@@ -1159,34 +1220,53 @@ const submitAssignment = async () => {
 
 const dispatchOrder = async (order: any) => {
   try {
-    // Update dispatch order status to DISPATCHED
+    console.log(`🚚 Iniciando despacho de orden: ${order.id}`)
+
+    // 1. Generar guías de remisión automáticamente para todos los documentos
+    console.log('📋 Generando guías de remisión...')
+    const dispatchResult = await despatchGuidesStore.createDespatchGuidesFromDispatchOrder(order.id)
+
+    if (!dispatchResult.success) {
+      console.error('❌ Error generando guías:', dispatchResult.errors)
+      alert(`Error generando guías de remisión:\n${dispatchResult.errors.map(e => `- ${e.sales_doc_number}: ${e.error}`).join('\n')}`)
+      return
+    }
+
+    // 2. Actualizar estado de la orden de despacho a DISPATCHED
+    console.log('📦 Actualizando estado de la orden...')
     await salesStore.updateDispatchOrder(order.id, {
       status: 'DISPATCHED',
       actual_date: new Date().toISOString().split('T')[0]
     })
 
-    // Update the local order data
+    // 3. Actualizar datos locales
     const orderIndex = salesStore.dispatchOrders.findIndex(o => o.id === order.id)
     if (orderIndex !== -1) {
-      const updatedOrder = { 
-        ...salesStore.dispatchOrders[orderIndex], 
+      const updatedOrder = {
+        ...salesStore.dispatchOrders[orderIndex],
         status: 'DISPATCHED',
         actual_date: new Date().toISOString().split('T')[0]
       }
       salesStore.dispatchOrders[orderIndex] = updatedOrder
     }
 
-    // Close view dialog if open
+    // 4. Cerrar dialog si está abierto
     if (showViewDialog.value) {
       showViewDialog.value = false
     }
-    
-    // TODO: Show success message
-    console.log('Order dispatched successfully!')
-    
+
+    // 5. Mostrar resumen de éxito
+    console.log('✅ Despacho completado exitosamente!')
+    console.log(`📊 Resumen:`)
+    console.log(`   - Total documentos procesados: ${dispatchResult.total_processed}`)
+    console.log(`   - Guías generadas exitosamente: ${dispatchResult.successful}`)
+    console.log(`   - Errores: ${dispatchResult.failed}`)
+
+    alert(`🎉 ¡Despacho completado exitosamente!\n\n📊 Resumen:\n• ${dispatchResult.successful} guías de remisión generadas\n• ${dispatchResult.total_processed} documentos procesados\n• Orden actualizada a estado DISPATCHED`)
+
   } catch (error) {
-    console.error('Error dispatching order:', error)
-    // TODO: Show error message
+    console.error('❌ Error durante el despacho:', error)
+    alert(`Error durante el proceso de despacho:\n${error.message}`)
   }
 }
 

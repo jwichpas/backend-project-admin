@@ -590,7 +590,11 @@ export const useSalesStore = defineStore('sales', {
           .select(`
             *,
             branches(name),
-            parties!customer_id(fullname)
+            parties!customer_id(fullname),
+            sales_doc_items(
+              *,
+              products(name, sku, unit_code)
+            )
           `)
           .eq('company_id', companyId)
           .order('created_at', { ascending: false })
@@ -599,12 +603,27 @@ export const useSalesStore = defineStore('sales', {
           console.error('Supabase error fetching sales docs:', error)
           throw error
         }
-        
+
         console.log('Sales docs fetched:', data?.length || 0, 'records')
         this.salesDocs = data?.map(item => ({
           ...item,
           customer_name: item.parties?.fullname,
-          branch_name: item.branches?.name
+          branch_name: item.branches?.name,
+          items: item.sales_doc_items?.map(docItem => ({
+            id: docItem.id,
+            product_id: docItem.product_id,
+            product: {
+              code: docItem.products?.sku || 'N/A',
+              description: docItem.products?.name || docItem.description || 'N/A',
+              unit_code: docItem.products?.unit_code || docItem.unit_code
+            },
+            description: docItem.description || docItem.products?.name,
+            unit_code: docItem.unit_code,
+            quantity: docItem.quantity,
+            unit_price: docItem.unit_price,
+            total_amount: docItem.total_line,
+            total: docItem.total_line
+          })) || []
         })) || []
       } catch (error: any) {
         this.error = error.message
@@ -1332,11 +1351,19 @@ export const useSalesStore = defineStore('sales', {
               total,
               currency_code,
               customer_id,
+              doc_type,
               parties!customer_id (
                 id,
                 fullname,
                 doc_number,
                 doc_type
+              ),
+              sales_doc_items (
+                id,
+                description,
+                quantity,
+                unit_code,
+                product_id
               )
             )
           `)
@@ -1632,6 +1659,41 @@ export const useSalesStore = defineStore('sales', {
       } catch (error: any) {
         this.error = error.message
         console.error('Error creating dispatch order:', error)
+        throw error
+      } finally {
+        this.loading = false
+      }
+    },
+
+    async updateSaleStatus(saleId: string, status: string) {
+      this.loading = true
+      this.error = null
+      try {
+        // Actualizar solo el status del sales_doc en la base de datos
+        const updateData = {
+          status: status.toUpperCase(),
+          updated_at: new Date().toISOString()
+        }
+
+        const { data: updatedDoc, error } = await supabase
+          .from('sales_docs')
+          .update(updateData)
+          .eq('id', saleId)
+          .select()
+          .single()
+
+        if (error) throw error
+
+        // Actualizar el estado local si existe
+        const index = this.salesDocs.findIndex(doc => doc.id === saleId)
+        if (index !== -1 && updatedDoc) {
+          this.salesDocs[index] = { ...this.salesDocs[index], ...updatedDoc }
+        }
+
+        return updatedDoc
+      } catch (error: any) {
+        this.error = error.message
+        console.error('Error updating sale status:', error)
         throw error
       } finally {
         this.loading = false

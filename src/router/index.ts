@@ -179,6 +179,13 @@ const router = createRouter({
       component: () => import('../views/Vehicles/VehicleTrackingView.vue'),
       meta: { requiresAuth: true }
     },
+    // Dispatch guides routes
+    {
+      path: '/despatch-guides',
+      name: 'despatch-guides',
+      component: () => import('../views/DespatchGuidesView.vue'),
+      meta: { requiresAuth: true }
+    },
     {
       path: '/map',
       name: 'map',
