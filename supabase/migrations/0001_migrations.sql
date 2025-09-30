@@ -1809,7 +1809,7 @@ AS $$
 DECLARE
     driver_name TEXT;
 BEGIN
-    SELECT p.fullname
+    SELECT p.fullname,p.doc_type, p.doc_number
     INTO driver_name
     FROM drivers d
     JOIN parties p ON p.id = d.party_id

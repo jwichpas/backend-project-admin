@@ -1054,13 +1054,21 @@ export const useDespatchGuidesStore = defineStore('despatchGuides', () => {
         placa: dispatchData.vehicle_plate
       }
       if (dispatchData.driver_id) {
+        console.log('🔧 DespatchGuides Store - Procesando conductor:', {
+          driver_document_type: dispatchData.driver.document_type,
+          isDocTypeDNI: dispatchData.driver.document_type === '1',
+          finalTipoDoc: dispatchData.driver.document_type === '1' ? '1' : '6'
+        })
+
         guideData.envio.conductor = {
-          tipoDoc: dispatchData.driver.document_type === 'DNI' ? '1' : '6',
+          tipoDoc: dispatchData.driver.document_type === '1' ? '1' : '6',
           numDoc: dispatchData.driver.document_number,
           nombres: dispatchData.driver.names,
           apellidos: dispatchData.driver.last_names,
           licencia: dispatchData.driver.license_number
         }
+
+        console.log('✅ DespatchGuides Store - Conductor final:', guideData.envio.conductor)
       }
       // NO agregar transportista para transporte privado
     } else {

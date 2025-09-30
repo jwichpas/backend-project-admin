@@ -359,34 +359,85 @@ const viewGuide = (guide: any) => {
 
 const downloadXML = (guide: any) => {
   if (guide.xml) {
-    const blob = new Blob([guide.xml], { type: 'application/xml' })
-    const url = window.URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `${guide.serie}-${guide.correlativo}.xml`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    window.URL.revokeObjectURL(url)
+    try {
+      // Check if the XML content is base64 encoded
+      let xmlContent = guide.xml
+
+      // Try to decode base64 if it looks like base64
+      if (isBase64(guide.xml)) {
+        console.log('🔍 Detected base64 content, decoding...')
+        xmlContent = atob(guide.xml)
+      }
+
+      const blob = new Blob([xmlContent], { type: 'application/xml' })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${guide.serie}-${guide.correlativo}.xml`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+
+      console.log('✅ XML downloaded successfully')
+    } catch (error) {
+      console.error('❌ Error downloading XML:', error)
+      alert('Error al descargar el archivo XML')
+    }
+  }
+}
+
+// Helper function to check if a string is base64 encoded
+const isBase64 = (str: string): boolean => {
+  try {
+    // Check if string matches base64 pattern and can be decoded
+    const base64Pattern = /^[A-Za-z0-9+/]*={0,2}$/
+    if (!base64Pattern.test(str)) return false
+
+    // Try to decode and encode back to verify
+    const decoded = atob(str)
+    const encoded = btoa(decoded)
+    return encoded === str
+  } catch {
+    return false
   }
 }
 
 const downloadPDF = async (guide: any) => {
   try {
-    await despatchGuidesStore.generateDespatchGuidePDF({
-      company: guide.company,
+    console.log('📄 Generating PDF for guide:', guide)
+
+    const pdfData = {
+      company: {
+        ruc: guide.company?.ruc || guide.company_ruc || '10000000001',
+        razonSocial: guide.company?.razonSocial || guide.company?.legal_name || guide.company_name || 'Empresa Demo',
+        nombreComercial: guide.company?.nombreComercial || guide.company?.trade_name || guide.company_trade_name || 'Demo',
+        address: {
+          ubigueo: guide.company?.address?.ubigueo || guide.company?.ubigeo_code || '150101',
+          departamento: guide.company?.address?.departamento || 'LIMA',
+          provincia: guide.company?.address?.provincia || 'LIMA',
+          distrito: guide.company?.address?.distrito || 'LIMA',
+          direccion: guide.company?.address?.direccion || guide.company?.address || 'Dirección no especificada',
+          codLocal: guide.company?.address?.codLocal || '0000'
+        }
+      },
       serie: guide.serie,
       correlativo: guide.correlativo,
+      fechaEmision: guide.issue_date || guide.fecha_emision,
+      tipoDoc: guide.doc_type || '09',
+      version: guide.version || '2022',
       destinatario: {
-        tipoDoc: guide.destinatario_tipo_doc,
-        numDoc: guide.destinatario_num_doc,
-        rznSocial: guide.destinatario_razon_social
+        tipoDoc: guide.destinatario_tipo_doc || guide.recipient_doc_type,
+        numDoc: guide.destinatario_num_doc || guide.recipient_doc_number,
+        rznSocial: guide.destinatario_razon_social || guide.recipient_business_name
       },
       envio: {
         codTraslado: guide.cod_traslado,
         modTraslado: guide.mod_traslado,
         fechaTraslado: guide.fecha_traslado,
         pesoTotal: guide.peso_total,
+        undPesoTotal: guide.und_peso_total || 'KGM',
+        numBultos: guide.num_bultos,
         partida: {
           ubigueo: guide.partida_ubigueo,
           direccion: guide.partida_direccion
@@ -394,12 +445,49 @@ const downloadPDF = async (guide: any) => {
         llegada: {
           ubigueo: guide.llegada_ubigueo,
           direccion: guide.llegada_direccion
-        }
+        },
+        // Add vehicle information if available
+        ...(guide.vehiculo_placa && {
+          vehiculo: {
+            placa: guide.vehiculo_placa
+          }
+        }),
+        // Add driver information if available
+        ...(guide.conductor_tipo_doc && {
+          conductor: {
+            tipoDoc: guide.conductor_tipo_doc,
+            numDoc: guide.conductor_num_doc,
+            nombres: guide.conductor_nombres,
+            apellidos: guide.conductor_apellidos,
+            licencia: guide.conductor_licencia
+          }
+        }),
+        // Add carrier information if available (for public transport)
+        ...(guide.transportista_tipo_doc && {
+          transportista: {
+            tipoDoc: guide.transportista_tipo_doc,
+            numDoc: guide.transportista_num_doc,
+            rznSocial: guide.transportista_razon_social,
+            nroMtc: guide.transportista_nro_mtc
+          }
+        })
       },
-      details: guide.details || []
-    })
+      details: guide.details || [],
+      // Add related document information if available
+      relatedDocument: {
+        id: guide.related_document_id || 'F001-00000001',
+        documentTypeCode: guide.related_document_type || '03',
+        documentType: guide.related_document_type === '01' ? 'Factura' : 'Boleta',
+        issuerPartyRuc: guide.company?.ruc || guide.company_ruc || '10000000001'
+      }
+    }
+
+    console.log('📤 PDF Data being sent:', pdfData)
+    await despatchGuidesStore.generateDespatchGuidePDF(pdfData)
+    console.log('✅ PDF generated successfully')
   } catch (error) {
-    console.error('Error al descargar PDF:', error)
+    console.error('❌ Error al descargar PDF:', error)
+    alert('Error al generar PDF: ' + (error.message || error))
   }
 }
 

@@ -148,11 +148,11 @@
                   >
                     <Eye class="h-4 w-4" />
                   </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    class="h-8 w-8" 
-                    @click="downloadPdf(doc)"
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    class="h-8 w-8"
+                    @click="showPdfFormatDialogHandler(doc)"
                     title="Descargar PDF"
                   >
                     <FileText class="h-4 w-4" />
@@ -285,7 +285,7 @@
             </Button>
             <Button
               variant="outline"
-              @click="downloadPdf(selectedDoc)"
+              @click="showPdfFormatDialogHandler(selectedDoc)"
             >
               <FileText class="mr-2 h-4 w-4" />
               Descargar PDF
@@ -434,7 +434,7 @@
               <Download class="mr-2 h-4 w-4" />
               Descargar CDR
             </Button>
-            <Button variant="outline" class="w-full justify-start" @click="downloadPdf(selectedDoc)">
+            <Button variant="outline" class="w-full justify-start" @click="showPdfFormatDialogHandler(selectedDoc); showActionsDialog = false">
               <FileText class="mr-2 h-4 w-4" />
               Descargar PDF
             </Button>
@@ -468,6 +468,49 @@
             </Button>
             <Button type="button">
               Crear Documento (Demo)
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    <!-- PDF Format Selection Dialog -->
+    <Dialog v-model:open="showPdfFormatDialog">
+      <DialogContent class="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Seleccionar Formato de Impresión</DialogTitle>
+        </DialogHeader>
+        <div v-if="selectedDocForPdf" class="space-y-4">
+          <div class="text-center text-sm text-muted-foreground">
+            {{ getDocTypeName(selectedDocForPdf.doc_type) }} {{ selectedDocForPdf.series }}-{{ String(selectedDocForPdf.number).padStart(8, '0') }}
+          </div>
+          <div class="grid gap-3">
+            <Button
+              variant="outline"
+              class="w-full h-auto py-6 flex-col gap-2"
+              @click="downloadPdf(selectedDocForPdf, 'a4')"
+            >
+              <FileText class="h-8 w-8" />
+              <div>
+                <div class="font-semibold">Formato A4</div>
+                <div class="text-xs text-muted-foreground">Hoja estándar (210mm x 297mm)</div>
+              </div>
+            </Button>
+            <Button
+              variant="outline"
+              class="w-full h-auto py-6 flex-col gap-2"
+              @click="downloadPdf(selectedDocForPdf, 'ticket')"
+            >
+              <Receipt class="h-8 w-8" />
+              <div>
+                <div class="font-semibold">Formato Ticket</div>
+                <div class="text-xs text-muted-foreground">Impresora térmica (80mm)</div>
+              </div>
+            </Button>
+          </div>
+          <div class="flex justify-end gap-2 pt-4 border-t">
+            <Button variant="outline" @click="showPdfFormatDialog = false">
+              Cancelar
             </Button>
           </div>
         </div>
@@ -531,7 +574,9 @@ const showCreateDocDialog = ref(false)
 const showDocDetailDialog = ref(false)
 const showActionsDialog = ref(false)
 const showDispatchDialog = ref(false)
+const showPdfFormatDialog = ref(false)
 const selectedDoc = ref<any>(null)
+const selectedDocForPdf = ref<any>(null)
 
 // Computed
 const filteredDocs = computed(() => salesStore.activeSalesDocs)
@@ -624,14 +669,156 @@ const viewDoc = (doc: any) => {
   showDocDetailDialog.value = true
 }
 
-const downloadPdf = async (doc: any) => {
+const showPdfFormatDialogHandler = (doc: any) => {
+  selectedDocForPdf.value = doc
+  showPdfFormatDialog.value = true
+}
+
+const downloadPdf = async (doc: any, format: 'a4' | 'ticket' = 'a4') => {
   try {
-    // Generate PDF from document data (implement PDF generation logic)
-    console.log('PDF generation not implemented yet for document:', doc)
-    // TODO: Implement PDF generation using jsPDF or similar
+    // Get facturacion token from localStorage
+    let facturacionToken = localStorage.getItem('facturacion_token')
+    const tokenExpiry = localStorage.getItem('facturacion_token_expiry')
+
+    // Check if token is expired and refresh if needed
+    if (!facturacionToken || (tokenExpiry && new Date(tokenExpiry) <= new Date())) {
+      console.log('Facturacion token expired or missing, getting new token...')
+      facturacionToken = await getFacturacionToken()
+    }
+
+    if (!facturacionToken) {
+      throw new Error('No se pudo obtener el token de autenticación')
+    }
+
+    // Call the Laravel backend to generate PDF using facturacion credentials
+    const response = await fetch(`${import.meta.env.VITE_FACTURACION_URL}/api/invoices/download-pdf`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${facturacionToken}`,
+        'Accept': 'application/pdf'
+      },
+      body: JSON.stringify({
+        document_data: doc,
+        company_data: companiesStore.currentCompany,
+        format: format
+      })
+    })
+
+    if (!response.ok) {
+      // If unauthorized, try to refresh token and retry once
+      if (response.status === 401) {
+        console.log('Token unauthorized, refreshing token...')
+        facturacionToken = await getFacturacionToken()
+
+        const retryResponse = await fetch(`${import.meta.env.VITE_FACTURACION_URL}/api/invoices/download-pdf`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${facturacionToken}`,
+            'Accept': 'application/pdf'
+          },
+          body: JSON.stringify({
+            document_data: doc,
+            company_data: companiesStore.currentCompany,
+            format: format
+          })
+        })
+
+        if (!retryResponse.ok) {
+          throw new Error(`Error generating PDF: ${retryResponse.statusText}`)
+        }
+
+        // Download PDF
+        const blob = await retryResponse.blob()
+        downloadBlobAsPdf(blob, doc)
+        return
+      }
+
+      throw new Error(`Error generating PDF: ${response.statusText}`)
+    }
+
+    // Download PDF
+    const blob = await response.blob()
+    downloadBlobAsPdf(blob, doc)
+
+    // Close the format selection dialog
+    showPdfFormatDialog.value = false
+
+    console.log(`PDF downloaded successfully for document: ${doc.series}-${doc.number} (format: ${format})`)
   } catch (error) {
     console.error('Error downloading PDF:', error)
+    alert('Error al generar el PDF. Inténtalo de nuevo.')
   }
+}
+
+
+// Helper function to get facturacion token
+const getFacturacionToken = async () => {
+  try {
+    const loginResponse = await fetch(`${import.meta.env.VITE_FACTURACION_URL}/api/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        email: import.meta.env.VITE_FACTURACION_USER,
+        password: import.meta.env.VITE_FACTURACION_CLAVE
+      })
+    })
+
+    if (!loginResponse.ok) {
+      throw new Error('Error en autenticación de facturación')
+    }
+
+    const loginData = await loginResponse.json()
+    const token = loginData.access_token
+
+    if (token) {
+      // Store token with expiry (assuming 1 hour expiry)
+      const expiryTime = new Date()
+      expiryTime.setHours(expiryTime.getHours() + 1)
+
+      localStorage.setItem('facturacion_token', token)
+      localStorage.setItem('facturacion_token_expiry', expiryTime.toISOString())
+
+      return token
+    }
+
+    throw new Error('No se recibió token válido')
+  } catch (error) {
+    console.error('Error getting facturacion token:', error)
+    throw error
+  }
+}
+
+// Helper function to download blob as PDF
+const downloadBlobAsPdf = (blob: Blob, doc: any) => {
+  const url = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `${doc.doc_type}-${doc.series}-${String(doc.number).padStart(8, '0')}.pdf`
+  document.body.appendChild(link)
+  link.click()
+
+  // Cleanup
+  document.body.removeChild(link)
+  window.URL.revokeObjectURL(url)
+}
+
+// Helper function to download blob as file with custom extension
+const downloadBlobAsFile = (blob: Blob, doc: any, extension: string) => {
+  const url = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `${doc.doc_type}-${doc.series}-${String(doc.number).padStart(8, '0')}.${extension}`
+  document.body.appendChild(link)
+  link.click()
+
+  // Cleanup
+  document.body.removeChild(link)
+  window.URL.revokeObjectURL(url)
 }
 
 // Helper function to decode hex-encoded URLs

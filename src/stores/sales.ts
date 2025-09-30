@@ -20,7 +20,7 @@ export interface SalesOrder {
   notes?: string
   created_at: string
   updated_at: string
-  
+
   // Datos relacionados (joins)
   customer_name?: string
   branch_name?: string
@@ -35,7 +35,7 @@ export interface SalesOrderItem {
   discount_pct: number
   total_line: number
   created_at: string
-  
+
   // Datos relacionados
   product_name?: string
   product_sku?: string
@@ -89,7 +89,7 @@ export interface SalesDoc {
   observations?: string
   created_at: string
   updated_at: string
-  
+
   // Datos relacionados
   customer_name?: string
   branch_name?: string
@@ -122,7 +122,7 @@ export interface SalesDocItem {
   total_line_usd: number
   total_line_clp: number
   created_at: string
-  
+
   // Datos relacionados
   product_name?: string
   product_sku?: string
@@ -142,7 +142,7 @@ export interface Shipment {
   notes?: string
   created_at: string
   updated_at: string
-  
+
   // Datos relacionados
   warehouse_name?: string
   sales_doc_number?: string
@@ -160,7 +160,7 @@ export interface ShipmentItem {
   serial_number?: string
   notes?: string
   created_at: string
-  
+
   // Datos relacionados
   product_name?: string
   product_sku?: string
@@ -178,7 +178,7 @@ export interface DispatchOrder {
   notes?: string
   created_at: string
   updated_at: string
-  
+
   // Datos relacionados
   warehouse_name?: string
   vehicle_plate?: string
@@ -292,7 +292,7 @@ export const useSalesStore = defineStore('sales', {
     salesOrderItems: [] as SalesOrderItem[],
     selectedSalesOrder: null as SalesOrder | null,
 
-    // Sales Documents  
+    // Sales Documents
     salesDocs: [] as SalesDoc[],
     salesDocItems: [] as SalesDocItem[],
     selectedSalesDoc: null as SalesDoc | null,
@@ -323,7 +323,7 @@ export const useSalesStore = defineStore('sales', {
     warehouses: [] as Warehouse[],
     vehicles: [] as Vehicle[],
     drivers: [] as Driver[],
-    
+
     // SUNAT Catalogs Cache
     documentTypes: {} as Record<string, string>,
     operationTypes: {} as Record<string, string>,
@@ -333,11 +333,11 @@ export const useSalesStore = defineStore('sales', {
 
   getters: {
     // Sales Orders
-    activeSalesOrders: (state) => state.salesOrders.filter(order => 
+    activeSalesOrders: (state) => state.salesOrders.filter(order =>
       order.status !== 'CANCELLED'
     ),
 
-    pendingSalesOrders: (state) => state.salesOrders.filter(order => 
+    pendingSalesOrders: (state) => state.salesOrders.filter(order =>
       order.status === 'PENDING' || order.status === 'APPROVED'
     ),
 
@@ -348,7 +348,7 @@ export const useSalesStore = defineStore('sales', {
     activeShipments: (state) => state.shipments,
 
     // Dispatch Orders
-    activeDispatchOrders: (state) => state.dispatchOrders.filter(order => 
+    activeDispatchOrders: (state) => state.dispatchOrders.filter(order =>
       order.status !== 'CANCELLED'
     ),
 
@@ -363,18 +363,18 @@ export const useSalesStore = defineStore('sales', {
     ),
 
     // Products
-    activeProducts: (state) => state.products.filter(product => 
+    activeProducts: (state) => state.products.filter(product =>
       product.active
     ),
 
-    availableProducts: (state) => state.products.filter(product => 
+    availableProducts: (state) => state.products.filter(product =>
       product.active && product.available_stock > 0
     ),
 
     // Price Lists
     activePriceLists: (state) => state.priceLists,
 
-    defaultPriceList: (state) => state.priceLists.find(priceList => 
+    defaultPriceList: (state) => state.priceLists.find(priceList =>
       priceList.is_default
     ) || null,
 
@@ -384,7 +384,7 @@ export const useSalesStore = defineStore('sales', {
     activeDrivers: (state) => state.drivers,
 
     // Available Sales Docs (not assigned to dispatch orders)
-    availableSalesDocs: (state) => state.salesDocs.filter(doc => 
+    availableSalesDocs: (state) => state.salesDocs.filter(doc =>
       // You would need to track which sales_docs are assigned to dispatch orders
       // For now, return all active sales docs
       true
@@ -395,7 +395,7 @@ export const useSalesStore = defineStore('sales', {
     // ========================================================================
     // SALES ORDERS
     // ========================================================================
-    
+
     async fetchSalesOrders(companyId: string) {
       this.loading = true
       this.error = null
@@ -415,7 +415,7 @@ export const useSalesStore = defineStore('sales', {
           console.error('Supabase error fetching sales orders:', error)
           throw error
         }
-        
+
         console.log('Sales orders fetched:', data?.length || 0, 'records')
         this.salesOrders = data?.map(item => ({
           ...item,
@@ -444,18 +444,18 @@ export const useSalesStore = defineStore('sales', {
           .order('created_at', { ascending: true })
 
         if (error) throw error
-        
+
         // Get measurement units for all items
         let measurementUnits = []
         if (data && data.length > 0) {
           const { data: unitsData, error: unitsError } = await supabase
             .rpc('get_sunat_measurement_units')
-          
+
           if (!unitsError) {
             measurementUnits = unitsData || []
           }
         }
-        
+
         this.salesOrderItems = data?.map(item => ({
           ...item,
           product_name: item.products?.name,
@@ -476,7 +476,7 @@ export const useSalesStore = defineStore('sales', {
       try {
         // Extract items from orderData
         const { items, ...salesOrderData } = orderData as any
-        
+
         // Create the sales order first
         const { data: salesOrder, error: orderError } = await supabase
           .from('sales_orders')
@@ -485,7 +485,7 @@ export const useSalesStore = defineStore('sales', {
           .single()
 
         if (orderError) throw orderError
-        
+
         // Create sales order items if they exist
         if (items && items.length > 0 && salesOrder) {
           const orderItems = items.map((item: any) => ({
@@ -502,11 +502,11 @@ export const useSalesStore = defineStore('sales', {
 
           if (itemsError) throw itemsError
         }
-        
+
         if (salesOrder) {
           this.salesOrders.unshift(salesOrder)
         }
-        
+
         return salesOrder
       } catch (error: any) {
         this.error = error.message
@@ -523,7 +523,7 @@ export const useSalesStore = defineStore('sales', {
       try {
         // Extract items from updateData
         const { items, ...salesOrderData } = updateData as any
-        
+
         // Update the sales order first
         const { data: updatedOrder, error: orderError } = await supabase
           .from('sales_orders')
@@ -533,7 +533,7 @@ export const useSalesStore = defineStore('sales', {
           .single()
 
         if (orderError) throw orderError
-        
+
         // Update sales order items if provided
         if (items && items.length > 0) {
           // Delete existing items
@@ -559,13 +559,13 @@ export const useSalesStore = defineStore('sales', {
 
           if (itemsError) throw itemsError
         }
-        
+
         // Update local state
         const index = this.salesOrders.findIndex(order => order.id === id)
         if (index !== -1 && updatedOrder) {
           this.salesOrders[index] = { ...this.salesOrders[index], ...updatedOrder }
         }
-        
+
         return updatedOrder
       } catch (error: any) {
         this.error = error.message
@@ -579,7 +579,7 @@ export const useSalesStore = defineStore('sales', {
     // ========================================================================
     // SALES DOCUMENTS
     // ========================================================================
-    
+
     async fetchSalesDocs(companyId: string) {
       this.loading = true
       this.error = null
@@ -590,7 +590,7 @@ export const useSalesStore = defineStore('sales', {
           .select(`
             *,
             branches(name),
-            parties!customer_id(fullname),
+            parties!customer_id(fullname, doc_type),
             sales_doc_items(
               *,
               products(name, sku, unit_code)
@@ -647,7 +647,7 @@ export const useSalesStore = defineStore('sales', {
           .order('line_number', { ascending: true })
 
         if (error) throw error
-        
+
         this.salesDocItems = data?.map(item => ({
           ...item,
           product_name: item.products?.name,
@@ -667,13 +667,13 @@ export const useSalesStore = defineStore('sales', {
       try {
         // Extract items from docData
         const { items, ...salesDocData } = docData as any
-        
+
         // Get branch_id from localStorage
         const selectedBranchId = localStorage.getItem('selectedBranchId')
         if (selectedBranchId) {
           salesDocData.branch_id = selectedBranchId
         }
-        
+
         // Create the sales document first
         const { data: salesDoc, error: docError } = await supabase
           .from('sales_docs')
@@ -682,7 +682,7 @@ export const useSalesStore = defineStore('sales', {
           .single()
 
         if (docError) throw docError
-        
+
         // Create sales document items if they exist
         if (items && items.length > 0 && salesDoc) {
           const docItems = items.map((item: any, index: number) => {
@@ -690,25 +690,25 @@ export const useSalesStore = defineStore('sales', {
             const unitPrice = Number(item.unit_price) || 0
             const quantity = Number(item.quantity) || 0
             const discountPct = Number(item.discount_pct) || 0
-            
+
             // Helper function to round to 6 decimal places to avoid precision issues
             const roundTo6 = (value: number): number => Math.round(value * 1000000) / 1000000
-            
+
             // Calculate base values
-            const unitPriceLocal = salesDocData.currency_code !== 'PEN' 
-              ? roundTo6(unitPrice * exchangeRate) 
+            const unitPriceLocal = salesDocData.currency_code !== 'PEN'
+              ? roundTo6(unitPrice * exchangeRate)
               : unitPrice
-            
-            const unitPriceUsd = salesDocData.currency_code === 'USD' 
-              ? unitPrice 
+
+            const unitPriceUsd = salesDocData.currency_code === 'USD'
+              ? unitPrice
               : roundTo6(unitPrice / exchangeRate)
-            
+
             const unitPriceClp = salesDocData.currency_code === 'CLP' ? unitPrice : 0
-            
+
             const discountAmount = roundTo6((quantity * unitPrice) * discountPct / 100)
             const totalLine = roundTo6((quantity * unitPrice) * (1 - discountPct / 100))
             const totalLineLocal = roundTo6(totalLine * exchangeRate)
-            
+
             return {
               company_id: salesDocData.company_id,
               sales_doc_id: salesDoc.id,
@@ -743,11 +743,11 @@ export const useSalesStore = defineStore('sales', {
 
           if (itemsError) throw itemsError
         }
-        
+
         if (salesDoc) {
           this.salesDocs.unshift(salesDoc)
         }
-        
+
         return salesDoc
       } catch (error: any) {
         this.error = error.message
@@ -839,7 +839,7 @@ export const useSalesStore = defineStore('sales', {
     // ========================================================================
     // SHIPMENTS
     // ========================================================================
-    
+
     async fetchShipments(companyId: string) {
       this.loading = true
       this.error = null
@@ -861,7 +861,7 @@ export const useSalesStore = defineStore('sales', {
           console.error('Supabase error fetching shipments:', error)
           throw error
         }
-        
+
         console.log('Shipments fetched:', data?.length || 0, 'records')
         this.shipments = data?.map(item => ({
           ...item,
@@ -892,7 +892,7 @@ export const useSalesStore = defineStore('sales', {
           .order('created_at', { ascending: true })
 
         if (error) throw error
-        
+
         this.shipmentItems = data?.map(item => ({
           ...item,
           product_name: item.products?.name,
@@ -912,7 +912,7 @@ export const useSalesStore = defineStore('sales', {
       try {
         // Extract items from shipmentData
         const { items, ...shipmentCoreData } = shipmentData as any
-        
+
         // Create the shipment first
         const { data: shipment, error: shipmentError } = await supabase
           .from('shipments')
@@ -921,7 +921,7 @@ export const useSalesStore = defineStore('sales', {
           .single()
 
         if (shipmentError) throw shipmentError
-        
+
         // Create shipment items if they exist
         if (items && items.length > 0 && shipment) {
           const shipmentItems = items.map((item: any) => ({
@@ -939,11 +939,11 @@ export const useSalesStore = defineStore('sales', {
 
           if (itemsError) throw itemsError
         }
-        
+
         if (shipment) {
           this.shipments.unshift(shipment)
         }
-        
+
         return shipment
       } catch (error: any) {
         this.error = error.message
@@ -966,13 +966,13 @@ export const useSalesStore = defineStore('sales', {
           .single()
 
         if (error) throw error
-        
+
         // Update local state
         const index = this.shipments.findIndex(shipment => shipment.id === id)
         if (index !== -1 && updatedShipment) {
           this.shipments[index] = { ...this.shipments[index], ...updatedShipment }
         }
-        
+
         return updatedShipment
       } catch (error: any) {
         this.error = error.message
@@ -986,7 +986,7 @@ export const useSalesStore = defineStore('sales', {
     // ========================================================================
     // DISPATCH ORDERS
     // ========================================================================
-    
+
     async fetchDispatchOrders(companyId: string) {
       this.loading = true
       this.error = null
@@ -1002,7 +1002,7 @@ export const useSalesStore = defineStore('sales', {
           console.error('Supabase error fetching dispatch orders:', error)
           throw error
         }
-        
+
         console.log('Dispatch orders fetched:', data?.length || 0, 'records')
         this.dispatchOrders = data || []
       } catch (error: any) {
@@ -1016,16 +1016,16 @@ export const useSalesStore = defineStore('sales', {
     // ========================================================================
     // PRODUCTS
     // ========================================================================
-    
+
     async fetchProducts(companyId: string, priceListId?: string) {
       this.loading = true
       this.error = null
       console.log('Fetching products for company:', companyId, 'with price list:', priceListId)
       try {
-        const payload: any = { 
-          p_company_id: companyId 
+        const payload: any = {
+          p_company_id: companyId
         }
-        
+
         // Add price list ID if provided
         if (priceListId) {
           payload.p_price_list_id = priceListId
@@ -1038,7 +1038,7 @@ export const useSalesStore = defineStore('sales', {
           console.error('Supabase error fetching products:', error)
           throw error
         }
-        
+
         console.log('Products fetched:', data?.length || 0, 'records')
         this.products = data || []
       } catch (error: any) {
@@ -1052,7 +1052,7 @@ export const useSalesStore = defineStore('sales', {
     // ========================================================================
     // PRICE LISTS
     // ========================================================================
-    
+
     async fetchPriceLists(companyId: string) {
       this.loading = true
       this.error = null
@@ -1069,10 +1069,10 @@ export const useSalesStore = defineStore('sales', {
           console.error('Supabase error fetching price lists:', error)
           throw error
         }
-        
+
         console.log('Price lists fetched:', data?.length || 0, 'records')
         this.priceLists = data || []
-        
+
         // Auto-select default price list if available
         if (!this.selectedPriceList && data && data.length > 0) {
           const defaultPriceList = data.find(pl => pl.is_default)
@@ -1089,7 +1089,7 @@ export const useSalesStore = defineStore('sales', {
     // ========================================================================
     // CUSTOMERS
     // ========================================================================
-    
+
     async fetchCustomers(companyId: string) {
       this.loading = true
       this.error = null
@@ -1106,7 +1106,7 @@ export const useSalesStore = defineStore('sales', {
           console.error('Supabase error fetching customers:', error)
           throw error
         }
-        
+
         // Map data to match expected Customer interface
         this.customers = data?.map(item => ({
           id: item.id,
@@ -1122,7 +1122,7 @@ export const useSalesStore = defineStore('sales', {
           created_at: item.created_at,
           updated_at: item.updated_at
         })) || []
-        
+
         console.log('Customers fetched:', this.customers.length, 'records')
       } catch (error: any) {
         this.error = error.message
@@ -1180,7 +1180,7 @@ export const useSalesStore = defineStore('sales', {
     // ========================================================================
     // WAREHOUSES, VEHICLES, DRIVERS
     // ========================================================================
-    
+
     async fetchWarehouses(companyId: string) {
       this.loading = true
       this.error = null
@@ -1196,7 +1196,7 @@ export const useSalesStore = defineStore('sales', {
           console.error('Supabase error fetching warehouses:', error)
           throw error
         }
-        
+
         console.log('Warehouses fetched:', data?.length || 0, 'records')
         this.warehouses = data || []
       } catch (error: any) {
@@ -1222,7 +1222,7 @@ export const useSalesStore = defineStore('sales', {
           console.error('Supabase error fetching vehicles:', error)
           throw error
         }
-        
+
         console.log('Vehicles fetched:', data?.length || 0, 'records')
         this.vehicles = data || []
       } catch (error: any) {
@@ -1251,7 +1251,7 @@ export const useSalesStore = defineStore('sales', {
           console.error('Supabase error fetching drivers:', error)
           throw error
         }
-        
+
         console.log('Drivers fetched:', data?.length || 0, 'records')
         this.drivers = data || []
       } catch (error: any) {
@@ -1268,7 +1268,7 @@ export const useSalesStore = defineStore('sales', {
       try {
         // Extract sales docs from dispatchOrderData
         const { salesDocs, ...dispatchData } = dispatchOrderData as any
-        
+
         // Create the dispatch order first
         const { data: dispatchOrder, error: dispatchError } = await supabase
           .from('dispatch_orders')
@@ -1277,7 +1277,7 @@ export const useSalesStore = defineStore('sales', {
           .single()
 
         if (dispatchError) throw dispatchError
-        
+
         // Assign sales documents to the dispatch order
         if (salesDocs && salesDocs.length > 0 && dispatchOrder) {
           const dispatchSalesDocs = salesDocs.map((salesDocId: string) => ({
@@ -1291,11 +1291,11 @@ export const useSalesStore = defineStore('sales', {
 
           if (salesDocsError) throw salesDocsError
         }
-        
+
         if (dispatchOrder) {
           this.dispatchOrders.unshift(dispatchOrder)
         }
-        
+
         return dispatchOrder
       } catch (error: any) {
         this.error = error.message
@@ -1318,13 +1318,13 @@ export const useSalesStore = defineStore('sales', {
           .single()
 
         if (error) throw error
-        
+
         // Update local state
         const index = this.dispatchOrders.findIndex(order => order.id === id)
         if (index !== -1 && updatedOrder) {
           this.dispatchOrders[index] = { ...this.dispatchOrders[index], ...updatedOrder }
         }
-        
+
         return updatedOrder
       } catch (error: any) {
         this.error = error.message
@@ -1408,14 +1408,14 @@ export const useSalesStore = defineStore('sales', {
     // ========================================================================
     // HELPER FUNCTIONS
     // ========================================================================
-    
+
     async fetchDocumentTypes() {
       try {
         const { data, error } = await supabase
           .rpc('get_sunat_document_types')
-        
+
         if (error) throw error
-        
+
         // Return as a map for easy lookup
         return data?.reduce((map, item) => {
           map[item.code] = item.descripcion
@@ -1426,7 +1426,7 @@ export const useSalesStore = defineStore('sales', {
         // Fallback to static mapping
         return {
           '01': 'FACTURA',
-          '03': 'BOLETA DE VENTA', 
+          '03': 'BOLETA DE VENTA',
           '07': 'NOTA DE CREDITO',
           '08': 'NOTA DE DEBITO'
         }
@@ -1441,7 +1441,7 @@ export const useSalesStore = defineStore('sales', {
           .order('code', { ascending: true })
 
         if (error) throw error
-        
+
         return data?.reduce((map, item) => {
           map[item.code] = item.descripcion
           return map
@@ -1455,7 +1455,7 @@ export const useSalesStore = defineStore('sales', {
     // ========================================================================
     // SELECTORS
     // ========================================================================
-    
+
     selectSalesOrder(salesOrder: SalesOrder) {
       this.selectedSalesOrder = salesOrder
     },
@@ -1487,27 +1487,27 @@ export const useSalesStore = defineStore('sales', {
     // ========================================================================
     // GETTERS
     // ========================================================================
-    
+
     getSalesOrderItems(salesOrderId: string) {
-      return this.salesOrderItems.filter(item => 
+      return this.salesOrderItems.filter(item =>
         item.sales_order_id === salesOrderId
       )
     },
 
     getSalesDocItems(salesDocId: string) {
-      return this.salesDocItems.filter(item => 
+      return this.salesDocItems.filter(item =>
         item.sales_doc_id === salesDocId
       )
     },
 
     getShipmentItems(shipmentId: string) {
-      return this.shipmentItems.filter(item => 
+      return this.shipmentItems.filter(item =>
         item.shipment_id === shipmentId
       )
     },
 
     getPendingSalesOrders() {
-      return this.salesOrders.filter(order => 
+      return this.salesOrders.filter(order =>
         order.status === 'APPROVED' || order.status === 'PENDING'
       )
     },
@@ -1523,7 +1523,7 @@ export const useSalesStore = defineStore('sales', {
         // Obtener el warehouse_id predeterminado (desde localStorage o configuración)
         const selectedBranchId = localStorage.getItem('selectedBranchId')
         let warehouseId = localStorage.getItem('defaultWarehouseId')
-        
+
         // Si no hay warehouse seleccionado, obtener el primero disponible
         if (!warehouseId) {
           const { data: warehouses, error: warehouseError } = await supabase
@@ -1532,12 +1532,12 @@ export const useSalesStore = defineStore('sales', {
             .eq('company_id', companyId)
             .eq('is_active', true)
             .limit(1)
-          
+
           if (warehouseError) throw warehouseError
           if (!warehouses || warehouses.length === 0) {
             throw new Error('No se encontró un almacén activo para crear el envío')
           }
-          
+
           warehouseId = warehouses[0].id
         }
 
@@ -1600,7 +1600,7 @@ export const useSalesStore = defineStore('sales', {
         // Obtener el warehouse_id predeterminado
         const selectedBranchId = localStorage.getItem('selectedBranchId')
         let warehouseId = localStorage.getItem('defaultWarehouseId')
-        
+
         // Si no hay warehouse seleccionado, obtener el primero disponible
         if (!warehouseId) {
           const { data: warehouses, error: warehouseError } = await supabase
@@ -1609,12 +1609,12 @@ export const useSalesStore = defineStore('sales', {
             .eq('company_id', companyId)
             .eq('is_active', true)
             .limit(1)
-          
+
           if (warehouseError) throw warehouseError
           if (!warehouses || warehouses.length === 0) {
             throw new Error('No se encontró un almacén activo para crear la orden de despacho')
           }
-          
+
           warehouseId = warehouses[0].id
         }
 

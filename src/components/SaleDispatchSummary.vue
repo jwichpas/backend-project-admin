@@ -147,7 +147,14 @@
                     label-key="display_label"
                     placeholder="Buscar vehículo por placa..."
                     :allow-search="true"
+                    :class="{ 'border-red-500': !plateValidation.isValid }"
                   />
+                  <div v-if="!plateValidation.isValid" class="text-sm text-red-600 mt-1">
+                    {{ plateValidation.message }}
+                  </div>
+                  <div v-if="plateValidation.isValid && dispatchData.vehicle_plate" class="text-sm text-green-600 mt-1">
+                    ✅ Formato válido para SUNAT
+                  </div>
                 </div>
 
                 <div>
@@ -156,7 +163,14 @@
                     v-model="dispatchData.driver_id"
                     :options="driverOptions"
                     placeholder="Seleccionar conductor"
+                    :class="{ 'border-red-500': !licenseValidation.isValid }"
                   />
+                  <div v-if="!licenseValidation.isValid" class="text-sm text-red-600 mt-1">
+                    {{ licenseValidation.message }}
+                  </div>
+                  <div v-if="licenseValidation.isValid && dispatchData.driver_id" class="text-sm text-green-600 mt-1">
+                    ✅ Licencia válida para SUNAT
+                  </div>
                 </div>
               </div>
             </div>
@@ -342,7 +356,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useDespatchGuidesStore } from '@/stores/despatchGuides'
 import { useSalesStore } from '@/stores/sales'
 import { useCompaniesStore } from '@/stores/companies'
@@ -388,6 +402,98 @@ const senderCompanyData = ref(null)
 const customerData = ref(null)
 const branchData = ref(null)
 
+// Validation state for vehicle plate and driver license
+const plateValidation = ref({ isValid: true, message: '' })
+const licenseValidation = ref({ isValid: true, message: '' })
+
+// Vehicle plate validation function (SUNAT UBL rules)
+const validateVehiclePlate = (plate) => {
+  if (!plate) {
+    plateValidation.value = { isValid: true, message: '' }
+    return true
+  }
+
+  // SUNAT UBL rules for vehicle plates:
+  // - Alfanumérico de 6 a 8 caracteres
+  // - Solo letras mayúsculas y números
+  // - No espacios, guiones, ni solo ceros
+
+  // Check length (6-8 characters)
+  if (plate.length < 6 || plate.length > 8) {
+    plateValidation.value = {
+      isValid: false,
+      message: '⚠️ La placa debe tener entre 6 y 8 caracteres'
+    }
+    return false
+  }
+
+  // Check only uppercase letters and numbers
+  const alphanumericRegex = /^[A-Z0-9]+$/
+  if (!alphanumericRegex.test(plate)) {
+    plateValidation.value = {
+      isValid: false,
+      message: '⚠️ Solo se permiten letras mayúsculas y números (sin espacios ni guiones)'
+    }
+    return false
+  }
+
+  // Check not only zeros
+  if (/^0+$/.test(plate)) {
+    plateValidation.value = {
+      isValid: false,
+      message: '⚠️ No se permite una placa con solo ceros'
+    }
+    return false
+  }
+
+  plateValidation.value = { isValid: true, message: '' }
+  return true
+}
+
+// Driver license validation function (SUNAT UBL rules)
+const validateDriverLicense = (license) => {
+  if (!license) {
+    licenseValidation.value = { isValid: true, message: '' }
+    return true
+  }
+
+  // SUNAT UBL rules for driver licenses:
+  // - Alfanumérico de 9 a 10 caracteres
+  // - Solo letras mayúsculas y números
+  // - No solo ceros
+
+  // Check length (9-10 characters)
+  if (license.length < 9 || license.length > 10) {
+    licenseValidation.value = {
+      isValid: false,
+      message: '⚠️ La licencia debe tener entre 9 y 10 caracteres'
+    }
+    return false
+  }
+
+  // Check only uppercase letters and numbers
+  const alphanumericRegex = /^[A-Z0-9]+$/
+  if (!alphanumericRegex.test(license)) {
+    licenseValidation.value = {
+      isValid: false,
+      message: '⚠️ Solo se permiten letras mayúsculas y números (sin espacios ni caracteres especiales)'
+    }
+    return false
+  }
+
+  // Check not only zeros
+  if (/^0+$/.test(license)) {
+    licenseValidation.value = {
+      isValid: false,
+      message: '⚠️ No se permite una licencia con solo ceros'
+    }
+    return false
+  }
+
+  licenseValidation.value = { isValid: true, message: '' }
+  return true
+}
+
 // Datos automáticos del documento relacionado (calculados desde la venta)
 
 // Datos de despacho
@@ -402,6 +508,23 @@ const dispatchData = ref({
   carrier_ruc: '',
   carrier_name: '',
   carrier_mtc: ''
+})
+
+// Watch for plate changes to validate
+watch(() => dispatchData.value.vehicle_plate, (newPlate) => {
+  validateVehiclePlate(newPlate)
+})
+
+// Watch for driver changes to validate license
+watch(() => dispatchData.value.driver_id, (newDriverId) => {
+  if (newDriverId) {
+    const selectedDriver = availableDrivers.value.find(d => d.id === newDriverId)
+    if (selectedDriver?.license_number) {
+      validateDriverLicense(selectedDriver.license_number)
+    }
+  } else {
+    licenseValidation.value = { isValid: true, message: '' }
+  }
 })
 
 // Computed - Handle different sale data structures
@@ -519,9 +642,103 @@ const loadAvailableSeries = async () => {
 
 const loadAvailableDrivers = async () => {
   try {
-    // Aquí deberías cargar los conductores desde tu store correspondiente
-    // Por ejemplo: await driversStore.fetchDrivers()
-    // Por ahora uso datos dummy
+    console.log('🚛 Cargando conductores desde Supabase...')
+
+    const { data: drivers, error } = await supabase
+      .from('drivers')
+      .select('*')
+
+    if (error) {
+      console.error('❌ Error al cargar conductores desde Supabase:', error)
+      // Fallback con datos de ejemplo en caso de error
+      availableDrivers.value = [
+        {
+          id: '1',
+          full_name: 'Juan Pérez García',
+          names: 'Juan',
+          last_names: 'Pérez García',
+          document_type: 'DNI',
+          document_number: '12345678',
+          license_number: 'B23773738'
+        }
+      ]
+      return
+    }
+
+    if (drivers && drivers.length > 0) {
+      console.log('📋 Obteniendo nombres de conductores usando get_driver_name...')
+
+      // Procesar datos reales desde Supabase usando la función get_driver_name
+      const processedDrivers = []
+
+      for (const driver of drivers) {
+        try {
+          // Usar una consulta que replique lo que hace get_driver_name pero retorne todos los campos
+          const { data: driverInfoResult, error: infoError } = await supabase
+            .from('drivers')
+            .select(`
+              id,
+              license_number,
+              parties:party_id (
+                fullname,
+                doc_number,
+                doc_type
+              )
+            `)
+            .eq('id', driver.id)
+            .single()
+
+          if (infoError) {
+            console.error('❌ Error al obtener información del conductor:', driver.id, infoError)
+            continue
+          }
+
+          const partyInfo = driverInfoResult?.parties
+          const driverName = partyInfo?.fullname || 'Sin nombre'
+          const documentNumber = partyInfo?.doc_number || ''
+          const documentType = partyInfo?.doc_type || '1'
+
+          console.log('📋 Datos del conductor desde parties:', {
+            id: driver.id,
+            name: driverName,
+            doc_type: documentType,
+            doc_number: documentNumber,
+            license: driver.license_number
+          })
+
+          const processedDriver = {
+            id: driver.id,
+            full_name: driverName,
+            names: driverName.split(' ')[0] || '',
+            last_names: driverName.split(' ').slice(1).join(' ') || '',
+            document_type: documentType,
+            document_number: documentNumber,
+            license_number: driver.license_number || ''
+          }
+
+          processedDrivers.push(processedDriver)
+          console.log('✅ Conductor procesado correctamente:', {
+            id: driver.id,
+            name: driverName,
+            document_type: documentType,
+            document_number: documentNumber,
+            license: driver.license_number
+          })
+
+        } catch (driverError) {
+          console.error('❌ Error procesando conductor:', driver.id, driverError)
+        }
+      }
+
+      availableDrivers.value = processedDrivers
+      console.log('✅ Conductores cargados exitosamente:', availableDrivers.value.length, 'conductores')
+    } else {
+      console.log('ℹ️ No se encontraron conductores en la base de datos')
+      availableDrivers.value = []
+    }
+  } catch (error) {
+    console.error('❌ Error al cargar conductores:', error)
+    // Fallback con datos de ejemplo en caso de error crítico
     availableDrivers.value = [
       {
         id: '1',
@@ -530,20 +747,9 @@ const loadAvailableDrivers = async () => {
         last_names: 'Pérez García',
         document_type: 'DNI',
         document_number: '12345678',
-        license_number: 'B2377373'
-      },
-      {
-        id: '2',
-        full_name: 'María González López',
-        names: 'María',
-        last_names: 'González López',
-        document_type: 'DNI',
-        document_number: '87654321',
-        license_number: 'A1234567'
+        license_number: 'B23773738'
       }
     ]
-  } catch (error) {
-    console.error('Error al cargar conductores:', error)
   }
 }
 
@@ -806,6 +1012,25 @@ const downloadPDF = async () => {
 
 const confirmDispatch = async () => {
   try {
+    // Validar formato de placa antes de enviar
+    if (dispatchData.value.vehicle_type === 'own' && dispatchData.value.vehicle_plate) {
+      if (!validateVehiclePlate(dispatchData.value.vehicle_plate)) {
+        alert('⚠️ Error: El formato de la placa del vehículo no es válido según SUNAT.\n\n' + plateValidation.value.message)
+        return
+      }
+    }
+
+    // Validar formato de licencia de conductor antes de enviar
+    if (dispatchData.value.vehicle_type === 'own' && dispatchData.value.driver_id) {
+      const selectedDriver = availableDrivers.value.find(d => d.id === dispatchData.value.driver_id)
+      if (selectedDriver?.license_number) {
+        if (!validateDriverLicense(selectedDriver.license_number)) {
+          alert('⚠️ Error: El formato de la licencia del conductor no es válido según SUNAT.\n\n' + licenseValidation.value.message)
+          return
+        }
+      }
+    }
+
     // Verificar que tenemos los datos necesarios
     if (!senderCompanyData.value) {
       console.error('Error: Datos de la empresa emisora no cargados')
@@ -833,6 +1058,14 @@ const confirmDispatch = async () => {
 
 
     // Crear objeto sale compatible con el store
+    // Debug: Log customer data sources
+    console.log('🔍 Customer data sources:', {
+      customerData: customerData.value,
+      propsParties: props.sale.parties,
+      finalDocType: (customerData.value?.doc_type || props.sale.parties?.doc_type),
+      finalDocTypeFormatted: (customerData.value?.doc_type || props.sale.parties?.doc_type) === '6' ? 'RUC' : 'DNI'
+    })
+
     const saleDataForStore = {
       ...props.sale,
       company: {
@@ -845,10 +1078,10 @@ const confirmDispatch = async () => {
         }
       },
       customer: {
-        document_type: customerData.value.doc_type,
-        document_number: customerData.value.doc_number,
-        business_name: customerData.value.razon_social,
-        full_name: customerData.value.fullname
+        document_type: (customerData.value?.doc_type || props.sale.parties?.doc_type) === '6' ? 'RUC' : 'DNI',
+        document_number: customerData.value?.doc_number || props.sale.parties?.doc_number,
+        business_name: customerData.value?.razon_social || props.sale.parties?.razon_social,
+        full_name: customerData.value?.fullname || props.sale.parties?.fullname
       },
       branch: {
         ubigueo: branchData.value.ubigeo_code || '150101',
@@ -874,15 +1107,32 @@ const confirmDispatch = async () => {
     if (dispatchData.value.driver_id) {
       const selectedDriver = availableDrivers.value.find(d => d.id === dispatchData.value.driver_id)
       if (selectedDriver) {
+        console.log('🔍 Datos del conductor seleccionado para envío:', {
+          id: selectedDriver.id,
+          document_type: selectedDriver.document_type,
+          document_number: selectedDriver.document_number,
+          full_name: selectedDriver.full_name,
+          license_number: selectedDriver.license_number
+        })
+
         enhancedDispatchData.driver = {
-          document_type: selectedDriver.document_type || 'DNI',
-          document_number: selectedDriver.document_number || selectedDriver.license_number,
+          document_type: selectedDriver.document_type || '1',
+          document_number: selectedDriver.document_number || '',
           names: selectedDriver.names || selectedDriver.full_name?.split(' ')[0] || '',
           last_names: selectedDriver.last_names || selectedDriver.full_name?.split(' ').slice(1).join(' ') || '',
           license_number: selectedDriver.license_number
         }
+
+        console.log('📤 Enhanced dispatch data - driver:', enhancedDispatchData.driver)
       }
     }
+
+    // Log final de datos antes de enviar a SUNAT
+    console.log('🚀 Enviando a SUNAT - Datos finales:', {
+      saleDataForStore,
+      enhancedDispatchData,
+      selectedSeries: selectedSeries.value
+    })
 
     // Enviar guía de remisión a SUNAT
     const result = await despatchGuidesStore.createDespatchGuideFromSale(
@@ -894,6 +1144,11 @@ const confirmDispatch = async () => {
     if (result.success) {
       // Actualizar estado de la venta a despachada
       await salesStore.updateSaleStatus(props.sale.id, 'dispatched')
+
+      console.log('✅ Guía de remisión creada exitosamente, iniciando flujo automático...')
+
+      // Flujo automático: Estado → PDF
+      await performAutomaticFlow(result)
 
       emit('success', {
         sale: props.sale,
@@ -908,6 +1163,8 @@ const confirmDispatch = async () => {
 
 const buildGuideData = () => {
   const selectedDriver = availableDrivers.value.find(d => d.id === dispatchData.value.driver_id)
+
+  console.log('🔍 BuildGuideData - Conductor seleccionado:', selectedDriver)
 
   // Verificar que tenemos los datos de la empresa
   if (!senderCompanyData.value) {
@@ -966,15 +1223,22 @@ const buildGuideData = () => {
         vehiculo: {
           placa: dispatchData.value.vehicle_plate
         },
-        ...(selectedDriver ? {
-          conductor: {
-            tipoDoc: '1',
-            numDoc: selectedDriver.document_number || '12345678',
+        ...(selectedDriver ? (() => {
+          const conductorData = {
+            tipoDoc: selectedDriver.document_type || '1',
+            numDoc: selectedDriver.document_number || '',
             nombres: (selectedDriver.full_name || 'Sin nombre').split(' ')[0],
             apellidos: (selectedDriver.full_name || 'Sin apellido').split(' ').slice(1).join(' ') || 'Sin apellido',
-            licencia: selectedDriver.license_number || 'Sin licencia'
+            licencia: selectedDriver.license_number || ''
           }
-        } : {})
+
+          console.log('📋 BuildGuideData - Datos del conductor para SUNAT:', {
+            selectedDriverData: selectedDriver,
+            finalConductorData: conductorData
+          })
+
+          return { conductor: conductorData }
+        })() : {})
       } : {
         transportista: {
           tipoDoc: '6',
@@ -1033,6 +1297,89 @@ const generateGuideNumber = () => {
 
   const nextNumber = (selectedSeries.value.last_number || 0) + 1
   return `${selectedSeries.value.series}-${nextNumber.toString().padStart(8, '0')}`
+}
+
+/**
+ * Flujo automático después de crear la guía de remisión:
+ * 1. Consultar estado en SUNAT
+ * 2. Si es exitoso, descargar PDF automáticamente
+ */
+const performAutomaticFlow = async (guideResult: any) => {
+  try {
+    console.log('🔄 Iniciando consulta automática de estado...')
+
+    if (!guideResult.ticket || !senderCompanyData.value?.ruc) {
+      console.error('❌ No se puede consultar estado: falta ticket o RUC')
+      return
+    }
+
+    // Esperar un momento para que SUNAT procese la guía
+    console.log('⏳ Esperando 3 segundos antes de consultar estado...')
+    await new Promise(resolve => setTimeout(resolve, 3000))
+
+    // Consultar estado en SUNAT
+    const statusResult = await despatchGuidesStore.checkDespatchGuideStatus(
+      guideResult.ticket,
+      senderCompanyData.value.ruc
+    )
+
+    console.log('📋 Resultado de consulta de estado:', statusResult)
+
+    if (statusResult.success) {
+      console.log('✅ Estado consultado exitosamente')
+
+      // Si el estado es aceptado o en proceso, descargar PDF automáticamente
+      if (statusResult.status === 'ACEPTADO' || statusResult.status === 'EN_PROCESO') {
+        console.log('📄 Descargando PDF automáticamente...')
+
+        // Esperar un momento adicional
+        await new Promise(resolve => setTimeout(resolve, 1000))
+
+        // Descargar PDF usando los datos de la guía
+        await downloadAutomaticPDF(guideResult)
+      } else {
+        console.log('⚠️ Estado no permite descarga automática:', statusResult.status)
+      }
+    } else {
+      console.log('⚠️ Error al consultar estado, pero continuando:', statusResult.error)
+
+      // Intentar descargar PDF de todas formas
+      console.log('📄 Intentando descarga de PDF de todas formas...')
+      await downloadAutomaticPDF(guideResult)
+    }
+
+  } catch (error) {
+    console.error('❌ Error en flujo automático:', error)
+
+    // En caso de error, intentar descargar PDF de todas formas
+    try {
+      console.log('📄 Intentando descarga de PDF como fallback...')
+      await downloadAutomaticPDF(guideResult)
+    } catch (pdfError) {
+      console.error('❌ Error también en descarga de PDF fallback:', pdfError)
+    }
+  }
+}
+
+/**
+ * Descargar PDF automáticamente usando los datos de la guía creada
+ */
+const downloadAutomaticPDF = async (guideResult: any) => {
+  try {
+    console.log('📄 Iniciando descarga automática de PDF...')
+
+    // Usar buildGuideData para generar el PDF con los mismos datos
+    const guideData = buildGuideData()
+
+    console.log('📋 Datos para PDF:', guideData)
+
+    await despatchGuidesStore.generateDespatchGuidePDF(guideData)
+
+    console.log('✅ PDF descargado automáticamente')
+
+  } catch (error) {
+    console.error('❌ Error al descargar PDF automáticamente:', error)
+  }
 }
 
 const formatCurrency = (amount: number) => {
