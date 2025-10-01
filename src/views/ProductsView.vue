@@ -218,12 +218,13 @@
 
     <!-- Create Product Dialog -->
     <Dialog v-model:open="showCreateProductDialog">
-      <DialogContent class="max-w-2xl" v-slot="{ close }">
-        <DialogHeader>
+      <DialogContent class="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogHeader class="flex-shrink-0">
           <DialogTitle>Nuevo Producto</DialogTitle>
         </DialogHeader>
 
-        <form @submit.prevent="submitProductForm" class="space-y-6">
+        <form @submit.prevent="submitProductForm" class="flex flex-col flex-1 overflow-hidden">
+          <div class="flex-1 overflow-y-auto px-1 space-y-6 pb-4">
           <div class="grid gap-4 md:grid-cols-2">
             <div>
               <label class="text-sm font-medium">Nombre del Producto</label>
@@ -455,13 +456,15 @@
               <p class="text-xs text-muted-foreground">PNG, JPG, WebP hasta 5MB cada una</p>
             </div>
           </div>
+          </div>
 
-          <DialogFooter>
+          <DialogFooter class="flex-shrink-0 pt-4 border-t">
             <Button type="button" variant="outline" @click="cancelProductForm">
               Cancelar
             </Button>
-            <Button type="submit" :disabled="productsStore.loading">
-              Crear Producto
+            <Button type="submit" :disabled="productsStore.loading || uploadingImages">
+              <span v-if="uploadingImages">Subiendo imágenes...</span>
+              <span v-else>Crear Producto</span>
             </Button>
           </DialogFooter>
         </form>
@@ -782,12 +785,13 @@
 
     <!-- Edit Product Dialog -->
     <Dialog v-model:open="showEditProductDialog">
-      <DialogContent class="max-w-2xl" v-slot="{ close }">
-        <DialogHeader>
+      <DialogContent class="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogHeader class="flex-shrink-0">
           <DialogTitle>Editar Producto</DialogTitle>
         </DialogHeader>
 
-        <form @submit.prevent="submitProductForm" class="space-y-6">
+        <form @submit.prevent="submitProductForm" class="flex flex-col flex-1 overflow-hidden">
+          <div class="flex-1 overflow-y-auto px-1 space-y-6 pb-4">
           <div class="grid gap-4 md:grid-cols-2">
             <div>
               <label class="text-sm font-medium">Nombre del Producto</label>
@@ -965,12 +969,105 @@
             <label for="edit_active" class="text-sm font-medium">Producto activo</label>
           </div>
 
-          <DialogFooter>
+          <!-- Images Section -->
+          <div class="space-y-4">
+            <div class="flex items-center justify-between">
+              <label class="text-sm font-medium">Imágenes del Producto</label>
+              <Button type="button" variant="outline" size="sm" @click="imageInput?.click()">
+                <Upload class="mr-2 h-4 w-4" />
+                Subir Imágenes
+              </Button>
+              <input
+                ref="imageInput"
+                type="file"
+                accept="image/*"
+                multiple
+                class="hidden"
+                @change="handleImageSelection"
+              />
+            </div>
+
+            <!-- Existing Images -->
+            <div v-if="existingImages.length > 0" class="space-y-2">
+              <p class="text-xs text-muted-foreground">Imágenes actuales:</p>
+              <div class="grid gap-4 grid-cols-2 md:grid-cols-4">
+                <div
+                  v-for="(image, index) in existingImages"
+                  :key="image.id"
+                  class="relative group"
+                >
+                  <div class="aspect-square rounded-lg border overflow-hidden bg-muted">
+                    <img
+                      :src="getImageUrl(image.storage_path)"
+                      :alt="`Imagen ${index + 1}`"
+                      class="w-full h-full object-cover"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="icon"
+                    class="absolute -top-2 -right-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                    @click="removeExistingImage(image.id, image.storage_path)"
+                  >
+                    <X class="h-3 w-3" />
+                  </Button>
+                  <div v-if="image.is_primary" class="absolute bottom-1 left-1">
+                    <Badge variant="success" class="text-xs">Principal</Badge>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- New Image Previews -->
+            <div v-if="imagePreviewUrls.length > 0" class="space-y-2">
+              <p class="text-xs text-muted-foreground">Nuevas imágenes:</p>
+              <div class="grid gap-4 grid-cols-2 md:grid-cols-4">
+                <div
+                  v-for="(url, index) in imagePreviewUrls"
+                  :key="`new-${index}`"
+                  class="relative group"
+                >
+                  <div class="aspect-square rounded-lg border overflow-hidden bg-muted">
+                    <img
+                      :src="url"
+                      :alt="`Preview ${index + 1}`"
+                      class="w-full h-full object-cover"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="icon"
+                    class="absolute -top-2 -right-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                    @click="removeImage(index)"
+                  >
+                    <X class="h-3 w-3" />
+                  </Button>
+                  <div v-if="existingImages.length === 0 && index === 0" class="absolute bottom-1 left-1">
+                    <Badge variant="success" class="text-xs">Principal</Badge>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Upload Hint -->
+            <div v-if="existingImages.length === 0 && imagePreviewUrls.length === 0" class="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 text-center">
+              <Upload class="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+              <p class="text-sm text-muted-foreground mb-1">Arrastra imágenes aquí o haz clic para seleccionar</p>
+              <p class="text-xs text-muted-foreground">PNG, JPG, WebP hasta 5MB cada una</p>
+            </div>
+          </div>
+          </div>
+
+          <DialogFooter class="flex-shrink-0 pt-4 border-t">
             <Button type="button" variant="outline" @click="cancelProductForm">
               Cancelar
             </Button>
-            <Button type="submit" :disabled="productsStore.loading">
-              Actualizar Producto
+            <Button type="submit" :disabled="productsStore.loading || uploadingImages || deletingImages">
+              <span v-if="uploadingImages">Subiendo imágenes...</span>
+              <span v-else-if="deletingImages">Eliminando imágenes...</span>
+              <span v-else>Actualizar Producto</span>
             </Button>
           </DialogFooter>
         </form>
@@ -1491,6 +1588,10 @@ const productForm = ref({
 const selectedImages = ref<File[]>([])
 const imagePreviewUrls = ref<string[]>([])
 const imageInput = ref<HTMLInputElement>()
+const uploadingImages = ref(false)
+const deletingImages = ref(false)
+const existingImages = ref<Array<{ id: string; storage_path: string; is_primary: boolean }>>([])
+const imagesToDelete = ref<Array<{ id: string; storage_path: string }>>([])
 
 // Advanced filters
 const advancedFilters = ref({
@@ -1661,19 +1762,36 @@ const loadMeasurementUnits = async () => {
 
 const submitProductForm = async () => {
   try {
-    if (!companiesStore.currentCompany) return
+    if (!companiesStore.currentCompany || !authStore.user) return
 
     const productData = {
       ...productForm.value,
       company_id: companiesStore.currentCompany.id
     }
 
+    let createdProductId: string | null = null
+
     if (editingProduct.value && selectedProduct.value) {
+      // Delete marked images first
+      if (imagesToDelete.value.length > 0) {
+        await deleteMarkedImages()
+      }
+
       // TODO: Implement update product
       console.log('Update product:', productData)
       // await productsStore.updateProduct(selectedProduct.value.product_id, productData)
+      createdProductId = selectedProduct.value.product_id
     } else {
-      await productsStore.createProduct(productData)
+      const newProduct = await productsStore.createProduct(productData)
+      createdProductId = newProduct.id
+    }
+
+    // Upload new images if any
+    if (selectedImages.value.length > 0 && createdProductId) {
+      uploadingImages.value = true
+      // Determine if first new image should be primary (only if no existing images)
+      const shouldSetPrimary = editingProduct.value ? existingImages.value.length === 0 : true
+      await uploadProductImages(createdProductId, companiesStore.currentCompany.id, shouldSetPrimary)
     }
 
     cancelProductForm()
@@ -1682,6 +1800,54 @@ const submitProductForm = async () => {
     await loadProducts()
   } catch (error) {
     console.error('Error saving product:', error)
+  } finally {
+    uploadingImages.value = false
+  }
+}
+
+// Upload product images to Supabase Storage and save references
+const uploadProductImages = async (productId: string, companyId: string, setPrimaryForFirst = true) => {
+  try {
+    for (let i = 0; i < selectedImages.value.length; i++) {
+      const file = selectedImages.value[i]
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${productId}_${Date.now()}_${i}.${fileExt}`
+      const filePath = `products/${fileName}`
+
+      // Upload to Supabase Storage in 'inventario' bucket
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('inventario')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        })
+
+      if (uploadError) {
+        console.error('Error uploading image:', uploadError)
+        continue
+      }
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('inventario')
+        .getPublicUrl(filePath)
+
+      // Save reference in product_images table
+      const { error: dbError } = await supabase
+        .from('product_images')
+        .insert({
+          company_id: companyId,
+          product_id: productId,
+          storage_path: filePath,
+          is_primary: setPrimaryForFirst && i === 0 // First image is primary only if specified
+        })
+
+      if (dbError) {
+        console.error('Error saving image reference:', dbError)
+      }
+    }
+  } catch (error) {
+    console.error('Error in uploadProductImages:', error)
   }
 }
 
@@ -1723,7 +1889,7 @@ const viewProduct = async (product: ProductFull) => {
   }
 }
 
-const editProduct = (product: ProductFull) => {
+const editProduct = async (product: ProductFull) => {
   selectedProduct.value = product
   editingProduct.value = true
 
@@ -1743,7 +1909,28 @@ const editProduct = (product: ProductFull) => {
     active: product.active !== false
   }
 
+  // Load existing images
+  await loadExistingImages(product.product_id)
+
   showEditProductDialog.value = true
+}
+
+// Load existing product images
+const loadExistingImages = async (productId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('product_images')
+      .select('id, storage_path, is_primary')
+      .eq('product_id', productId)
+      .order('is_primary', { ascending: false })
+
+    if (error) throw error
+
+    existingImages.value = data || []
+  } catch (error) {
+    console.error('Error loading existing images:', error)
+    existingImages.value = []
+  }
 }
 
 const showProductMenu = (product: ProductFull) => {
@@ -1778,6 +1965,59 @@ const removeImage = (index: number) => {
 const resetImages = () => {
   selectedImages.value = []
   imagePreviewUrls.value = []
+  existingImages.value = []
+  imagesToDelete.value = []
+}
+
+// Get image URL from storage path
+const getImageUrl = (storagePath: string) => {
+  const { data } = supabase.storage
+    .from('inventario')
+    .getPublicUrl(storagePath)
+  return data.publicUrl
+}
+
+// Mark existing image for deletion
+const removeExistingImage = (imageId: string, storagePath: string) => {
+  // Remove from existing images display
+  existingImages.value = existingImages.value.filter(img => img.id !== imageId)
+  // Mark for deletion
+  imagesToDelete.value.push({ id: imageId, storage_path: storagePath })
+}
+
+// Delete marked images
+const deleteMarkedImages = async () => {
+  if (imagesToDelete.value.length === 0) return
+
+  deletingImages.value = true
+  try {
+    for (const image of imagesToDelete.value) {
+      // Delete from storage
+      const { error: storageError } = await supabase.storage
+        .from('inventario')
+        .remove([image.storage_path])
+
+      if (storageError) {
+        console.error('Error deleting image from storage:', storageError)
+      }
+
+      // Delete from database
+      const { error: dbError } = await supabase
+        .from('product_images')
+        .delete()
+        .eq('id', image.id)
+
+      if (dbError) {
+        console.error('Error deleting image from database:', dbError)
+      }
+    }
+
+    imagesToDelete.value = []
+  } catch (error) {
+    console.error('Error in deleteMarkedImages:', error)
+  } finally {
+    deletingImages.value = false
+  }
 }
 
 const applyAdvancedFilters = () => {

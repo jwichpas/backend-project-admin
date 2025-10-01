@@ -159,7 +159,10 @@
             <TableRow v-else v-for="item in inventoryItems" :key="`${item.product_id}-${item.warehouse_id}`">
               <TableCell>
                 <div class="flex items-center gap-3">
-                  <div class="h-10 w-10 rounded-md bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
+                  <div v-if="item.main_image" class="h-10 w-10 rounded-md overflow-hidden">
+                    <img :src="item.main_image" :alt="item.product_name" class="h-full w-full object-cover" />
+                  </div>
+                  <div v-else class="h-10 w-10 rounded-md bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
                     <Package class="h-5 w-5 text-white" />
                   </div>
                   <div>

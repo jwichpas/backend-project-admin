@@ -217,10 +217,46 @@
             </div>
           </li>
           <li>
-            <router-link to="/inventory" class="group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors" :class="getNavClass('/inventory')">
-              <Package2 class="mr-3 h-5 w-5 transition-colors" :class="getIconClass('/inventory')" />
-              <span v-if="!isCollapsed">Inventario</span>
-            </router-link>
+            <div class="relative">
+              <button
+                @click="toggleInventoryMenu"
+                class="group flex items-center w-full rounded-md px-3 py-2 text-sm font-medium transition-colors"
+                :class="getNavClass('/inventory')"
+              >
+                <Package2 class="mr-3 h-5 w-5 transition-colors" :class="getIconClass('/inventory')" />
+                <span v-if="!isCollapsed" class="flex-1 text-left">Inventario</span>
+                <ChevronDown
+                  v-if="!isCollapsed"
+                  class="h-4 w-4 transition-transform"
+                  :class="{ 'rotate-180': inventoryMenuOpen }"
+                />
+              </button>
+
+              <!-- Inventory Submenu -->
+              <div v-if="inventoryMenuOpen && !isCollapsed" class="mt-1 space-y-1 pl-6">
+                <router-link
+                  to="/inventory"
+                  class="block rounded-md px-3 py-2 text-sm transition-colors"
+                  :class="getSubmenuClass('/inventory')"
+                >
+                  Control de Stock
+                </router-link>
+                <router-link
+                  to="/inventory/formato-12-1"
+                  class="block rounded-md px-3 py-2 text-sm transition-colors"
+                  :class="getSubmenuClass('/inventory/formato-12-1')"
+                >
+                  Formato 12.1 - SUNAT
+                </router-link>
+                <router-link
+                  to="/inventory/formato-13-1"
+                  class="block rounded-md px-3 py-2 text-sm transition-colors"
+                  :class="getSubmenuClass('/inventory/formato-13-1')"
+                >
+                  Formato 13.1 - SUNAT
+                </router-link>
+              </div>
+            </div>
           </li>
           <li>
             <div class="relative">
@@ -354,6 +390,17 @@
             <router-link to="/exchange-rates" class="group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors" :class="getNavClass('/exchange-rates')">
               <DollarSign class="mr-3 h-5 w-5 transition-colors" :class="getIconClass('/exchange-rates')" />
               <span v-if="!isCollapsed">Tipos de Cambio</span>
+            </router-link>
+          </li>
+
+          <!-- WhatsApp Section -->
+          <li class="mt-6">
+            <p v-if="!isCollapsed" class="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Comunicación</p>
+          </li>
+          <li>
+            <router-link to="/whatsapp" class="group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors" :class="getNavClass('/whatsapp')">
+              <MessageSquare class="mr-3 h-5 w-5 transition-colors" :class="getIconClass('/whatsapp')" />
+              <span v-if="!isCollapsed">WhatsApp Business</span>
             </router-link>
           </li>
 
@@ -536,7 +583,7 @@ import { useProductsStore } from '@/stores/products'
 import {
   Menu, LayoutDashboard, Settings, Moon, Sun, User,
   Receipt, Users, ShoppingCart, Truck, Package, Package2, Warehouse, BarChart3,
-  Building, MapPin, FileText, ChevronDown, Bell, DollarSign, CreditCard, Car, Send
+  Building, MapPin, FileText, ChevronDown, Bell, DollarSign, CreditCard, Car, Send, MessageSquare
 } from 'lucide-vue-next'
 import Select from '@/components/ui/Select.vue'
 import { supabase } from '@/lib/supabase'
@@ -571,6 +618,7 @@ const productsMenuOpen = ref(false)
 const salesMenuOpen = ref(false)
 const purchasesMenuOpen = ref(false)
 const vehiclesMenuOpen = ref(false)
+const inventoryMenuOpen = ref(false)
 const warehousesMenuOpen = ref(false)
 const notificationsOpen = ref(false)
 const exchangeRates = ref<ExchangeRate[]>([])
@@ -581,6 +629,7 @@ const toggleProductsMenu = () => { productsMenuOpen.value = !productsMenuOpen.va
 const toggleSalesMenu = () => { salesMenuOpen.value = !salesMenuOpen.value }
 const togglePurchasesMenu = () => { purchasesMenuOpen.value = !purchasesMenuOpen.value }
 const toggleVehiclesMenu = () => { vehiclesMenuOpen.value = !vehiclesMenuOpen.value }
+const toggleInventoryMenu = () => { inventoryMenuOpen.value = !inventoryMenuOpen.value }
 const toggleWarehousesMenu = () => { warehousesMenuOpen.value = !warehousesMenuOpen.value }
 const toggleNotifications = () => { notificationsOpen.value = !notificationsOpen.value }
 
@@ -692,6 +741,8 @@ const getPageTitle = () => {
     'purchases-docs': 'Documentos de Compra',
     'purchases-receptions': 'Recepciones',
     'inventory': 'Inventario',
+    'formato-12-1': 'Formato 12.1 - SUNAT',
+    'formato-13-1': 'Formato 13.1 - SUNAT',
     'warehouses': 'Gestión de Almacenes',
     'warehouse-visualizer': 'Visualizador de Almacenes',
     'customers': 'Clientes',
@@ -837,6 +888,10 @@ watch(route, (newRoute) => {
   // Auto-open vehicles menu when visiting vehicles routes
   if (newRoute.path.startsWith('/vehicles')) {
     vehiclesMenuOpen.value = true
+  }
+  // Auto-open inventory menu when visiting inventory routes
+  if (newRoute.path.startsWith('/inventory')) {
+    inventoryMenuOpen.value = true
   }
   // Auto-open warehouses menu when visiting warehouses routes
   if (newRoute.path.startsWith('/warehouses')) {

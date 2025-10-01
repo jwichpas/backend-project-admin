@@ -1039,8 +1039,22 @@ export const useSalesStore = defineStore('sales', {
           throw error
         }
 
-        console.log('Products fetched:', data?.length || 0, 'records')
-        this.products = data || []
+        // Convert storage paths to public URLs for main_image
+        const productsWithImages = (data || []).map((product: any) => {
+          if (product.main_image) {
+            const { data: urlData } = supabase.storage
+              .from('inventario')
+              .getPublicUrl(product.main_image)
+            return {
+              ...product,
+              main_image: urlData.publicUrl
+            }
+          }
+          return product
+        })
+
+        console.log('Products fetched:', productsWithImages?.length || 0, 'records')
+        this.products = productsWithImages
       } catch (error: any) {
         this.error = error.message
         console.error('Error fetching products:', error)

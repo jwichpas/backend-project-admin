@@ -92,6 +92,12 @@ export const DialogFooter = defineComponent({
 // Dialog Trigger (for completeness)
 export const DialogTrigger = defineComponent({
   name: 'DialogTrigger',
+  props: {
+    asChild: {
+      type: Boolean,
+      default: false
+    }
+  },
   setup(_, { slots }) {
     return () => slots.default?.()
   }

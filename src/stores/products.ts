@@ -146,6 +146,7 @@ export interface InventoryItem {
   original_currency?: string
   min_stock?: number
   max_stock?: number
+  main_image?: string
 }
 
 export interface Warehouse {
@@ -251,8 +252,23 @@ export const useProductsStore = defineStore('products', {
         })
 
         if (error) throw error
-        this.productsFull = data || []
-        console.log('Products full fetched:', data?.length || 0)
+
+        // Convert storage paths to public URLs for main_image
+        const productsWithImages = (data || []).map((product: ProductFull) => {
+          if (product.main_image) {
+            const { data: urlData } = supabase.storage
+              .from('inventario')
+              .getPublicUrl(product.main_image)
+            return {
+              ...product,
+              main_image: urlData.publicUrl
+            }
+          }
+          return product
+        })
+
+        this.productsFull = productsWithImages
+        console.log('Products full fetched:', productsWithImages?.length || 0)
       } catch (error: any) {
         this.error = error.message
         console.error('Error fetching products full:', error)
@@ -417,7 +433,22 @@ export const useProductsStore = defineStore('products', {
         })
 
         if (error) throw error
-        this.inventoryItems = data || []
+
+        // Convert storage paths to public URLs for main_image
+        const itemsWithImages = (data || []).map((item: InventoryItem) => {
+          if (item.main_image) {
+            const { data: urlData } = supabase.storage
+              .from('inventario')
+              .getPublicUrl(item.main_image)
+            return {
+              ...item,
+              main_image: urlData.publicUrl
+            }
+          }
+          return item
+        })
+
+        this.inventoryItems = itemsWithImages
       } catch (error: any) {
         this.error = error.message
         console.error('Error fetching inventory items:', error)

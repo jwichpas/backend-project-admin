@@ -135,6 +135,18 @@ const router = createRouter({
       component: () => import('../views/InventoryView.vue'),
       meta: { requiresAuth: true }
     },
+    {
+      path: '/inventory/formato-12-1',
+      name: 'inventory-formato-12-1',
+      component: () => import('../views/Inventory/Formato12_1View.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/inventory/formato-13-1',
+      name: 'inventory-formato-13-1',
+      component: () => import('../views/Inventory/Formato13_1View.vue'),
+      meta: { requiresAuth: true }
+    },
     // Warehouse management routes
     {
       path: '/warehouses',
@@ -228,7 +240,20 @@ const router = createRouter({
       component: () => import('../views/ExchangeRates.vue'),
       meta: { requiresAuth: true }
     },
-    
+    // WhatsApp module
+    {
+      path: '/whatsapp',
+      name: 'whatsapp',
+      component: () => import('../views/WhatsApp/WhatsAppSessionsView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/whatsapp/messages',
+      name: 'whatsapp-messages',
+      component: () => import('../views/WhatsApp/WhatsAppMessagesView.vue'),
+      meta: { requiresAuth: true }
+    },
+
     // Legacy routes (to be removed)
     {
       path: '/about',
